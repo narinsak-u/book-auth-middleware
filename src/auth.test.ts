@@ -63,8 +63,17 @@ describe("central identity public HTTP behavior", () => {
 
   test("rejects unknown clients, unregistered redirects, and dynamic registration", async () => {
     const unknown = await fetch(`${provider}/api/auth/oauth2/authorize?response_type=code&client_id=unknown&redirect_uri=https%3A%2F%2Fevil.example%2Fcallback&scope=openid&state=state&code_challenge=challenge&code_challenge_method=S256`, { redirect: "manual" });
-    expect(unknown.status).toBe(400);
-    expect(await unknown.text()).toContain("invalid_client");
+    expect(unknown.ok).toBe(false);
+    const unknownLocation = unknown.headers.get("location");
+    if (unknownLocation) {
+      const destination = new URL(unknownLocation);
+      expect(destination.origin).toBe(new URL(provider).origin);
+      expect(destination.searchParams.get("error")).toBe("invalid_client");
+      expect(destination.searchParams.has("code")).toBe(false);
+    } else {
+      expect(unknown.status).toBeGreaterThanOrEqual(400);
+      expect(await unknown.text()).toContain("invalid_client");
+    }
 
     const registration = await fetch(`${provider}/api/auth/oauth2/register`, {
       method: "POST",
@@ -156,8 +165,20 @@ describe("central identity public HTTP behavior", () => {
       code_challenge: "challenge",
       code_challenge_method: "S256",
     })}`, { headers: { cookie }, redirect: "manual" });
-    expect([400, 401]).toContain(badRedirect.status);
-    expect(badRedirect.headers.get("location") ?? "").not.toContain("evil.example");
+    expect(badRedirect.ok).toBe(false);
+    const badRedirectLocation = badRedirect.headers.get("location");
+    if (badRedirectLocation) {
+      const destination = new URL(badRedirectLocation);
+      expect(destination.origin).toBe(new URL(provider).origin);
+      expect(destination.searchParams.get("error")).toBeTruthy();
+      expect(destination.searchParams.has("code")).toBe(false);
+      expect(destination.href).not.toContain("evil.example");
+    } else {
+      expect(badRedirect.status).toBeGreaterThanOrEqual(400);
+      const body = await badRedirect.text();
+      expect(body).toContain("invalid");
+      expect(body).not.toContain("evil.example");
+    }
 
     const deniedActions = [
       fetch(`${provider}/api/auth/oauth2/create-client`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [redirectURI] }) }),

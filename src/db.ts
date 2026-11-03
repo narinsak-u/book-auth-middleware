@@ -8,4 +8,5 @@ const client = postgres(process.env.DATABASE_URL ?? "postgres://central:central@
 });
 
 export const db = drizzle(client, { schema });
+export const closeDatabase = () => client.end();
 export const databaseReady = () => db.execute(sql`select 1`);
