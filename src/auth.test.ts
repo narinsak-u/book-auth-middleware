@@ -48,14 +48,17 @@ async function signIn(address: string) {
   return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
 }
 async function disableIdentity(address: string) {
-  const process = Bun.spawn(["bun", "run", "disable:central-identity"], {
+  const child = Bun.spawn([
+    "docker", "compose", "--env-file", ".env", "run", "--rm", "--no-deps",
+    "-e", `CENTRAL_IDENTITY_EMAIL=${address}`,
+    "auth", "bun", "run", "disable:central-identity",
+  ], {
     cwd: import.meta.dir + "/..",
-    env: { ...process.env, CENTRAL_IDENTITY_EMAIL: address },
     stdout: "ignore",
     stderr: "pipe",
   });
-  const exitCode = await process.exited;
-  if (exitCode !== 0) throw new Error(await new Response(process.stderr).text());
+  const exitCode = await child.exited;
+  if (exitCode !== 0) throw new Error(await new Response(child.stderr).text());
 }
 
 describe("central identity public HTTP behavior", () => {
