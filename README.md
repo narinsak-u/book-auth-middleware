@@ -34,6 +34,8 @@ Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open t
 
 Use the sibling repository at `../book-bidding` with the exact public callback `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
 
+The canonical issuer is `https://auth.127.0.0.1.nip.io/api/auth`; its OpenID Connect discovery document is at `https://auth.127.0.0.1.nip.io/api/auth/.well-known/openid-configuration`.
+
 ```sh
 cp .env.example .env
 cp ../book-bidding/.env.example ../book-bidding/.env
@@ -42,7 +44,7 @@ docker compose --env-file .env up -d db mailpit
 docker compose --env-file .env run --rm --no-deps auth bun run provision:bidding
 ```
 
-The command prints a one-time client ID and secret. Before starting the provider, put only the printed client ID in `BIDDING_OIDC_CLIENT_ID` in this repository's ignored `.env`; put both printed credentials in `../book-bidding/.env` as `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET`. Keep both files private (`chmod 600 .env ../book-bidding/.env`) and do not commit or paste the secret elsewhere. The provider loads that ID into its trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`, so an authenticated user can complete authorization without a separate consent screen; other untrusted clients are not provisioned. Ordinary users cannot create, update, delete, list, read, or rotate OAuth clients, and dynamic registration is disabled.
+The command prints a one-time client ID and secret. Before starting the provider, put only the printed client ID in `BIDDING_OIDC_CLIENT_ID` in this repository's ignored `.env`; put both printed credentials in `../book-bidding/.env` as `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET`. Keep both files private (`chmod 600 .env ../book-bidding/.env`) and do not commit or paste the secret elsewhere. The provider loads that ID into its trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`, so an authenticated user can complete authorization without a separate consent screen; other untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate the privileged client-creation request. Ordinary users cannot create, update, delete, list, read, or rotate OAuth clients, and dynamic registration is disabled.
 
 Start the provider and TLS proxy:
 
@@ -55,7 +57,7 @@ Caddy serves the app's `bidding.127.0.0.1.sslip.io` host over HTTPS and proxies 
 ```sh
 cd ../book-bidding
 npm install
-npm run db:migrate
+bun run db:push
 npm run dev -- --host 0.0.0.0
 ```
 

@@ -57,7 +57,8 @@ export const auth = betterAuth({
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
       cachedTrustedClients: new Set(biddingClientId ? [biddingClientId] : []),
-      clientPrivileges: async () => process.env.BIDDING_OIDC_PROVISIONING === "true",
+      clientPrivileges: async ({ action }) =>
+        action === "create" && process.env.BIDDING_OIDC_PROVISIONING === "true",
     }),
   ],
 });

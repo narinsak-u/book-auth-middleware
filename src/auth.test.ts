@@ -49,10 +49,10 @@ async function signIn(address: string) {
 }
 describe("central identity public HTTP behavior", () => {
   test("publishes canonical OIDC discovery and public signing keys", async () => {
-    const discovery = await fetch(`${provider}/.well-known/openid-configuration`);
+    const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
     const metadata = await discovery.json();
-    expect(metadata.issuer).toBe(provider);
+    expect(metadata.issuer).toBe(`${provider}/api/auth`);
     expect(metadata.authorization_endpoint).toBe(`${provider}/api/auth/oauth2/authorize`);
     expect(metadata.token_endpoint).toBe(`${provider}/api/auth/oauth2/token`);
     expect(metadata.jwks_uri).toBe(`${provider}/api/auth/jwks`);
@@ -113,7 +113,7 @@ describe("central identity public HTTP behavior", () => {
       const destination = new URL(response.headers.get("location")!);
       expect(destination.origin + destination.pathname).toBe(redirectURI);
       expect(destination.searchParams.get("state")).toBe(state);
-      expect(destination.searchParams.get("iss")).toBe(provider);
+      expect(destination.searchParams.get("iss")).toBe(`${provider}/api/auth`);
       return destination.searchParams.get("code")!;
     };
     const exchange = (code: string, verifier: string) => fetch(`${provider}/api/auth/oauth2/token`, {
