@@ -5,7 +5,7 @@
     "test": "bun test src/auth.test.ts",
     "dev": "bun run --watch src/index.ts",
     "start": "bun src/index.ts",
-    "provision:bidding": "BIDDING_OIDC_PROVISIONING=true bun src/provision-bidding.ts",
+    "provision:bidding": "bun src/provision-bidding.ts",
     "db:generate": "drizzle-kit generate --config=src/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=src/drizzle.config.ts",
     "typecheck": "tsc --noEmit"

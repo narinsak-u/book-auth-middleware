@@ -1,4 +1,5 @@
-import { auth } from "./auth";
+process.env.BIDDING_OIDC_PROVISIONING = "true";
+const { auth } = await import("./auth");
 const redirectURI = "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity";
 const client = await auth.api.adminCreateOAuthClient({
   headers: new Headers(),
