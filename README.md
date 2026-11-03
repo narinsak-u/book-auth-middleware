@@ -5,7 +5,7 @@ This repository runs a local Elysia + Better Auth identity provider with Postgre
 ## Prerequisites
 
 - Docker Engine with the Compose plugin
-- Bun 1.2 or newer (to run the public HTTP regression tests)
+- Bun 1.4.2 or newer (matches the committed lockfile and runs the public HTTP regression tests)
 - Port 443 available
 
 The provider is served over HTTPS at `https://auth.127.0.0.1.nip.io`. That hostname resolves to loopback through nip.io DNS. Caddy creates a local CA and issues the HTTPS certificate; import that CA into the host/browser trust store before opening the site or running tests.
