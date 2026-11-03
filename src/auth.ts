@@ -54,9 +54,10 @@ export const auth = betterAuth({
     jwt(),
     oauthProvider({
       loginPage: "/",
+      consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
       cachedTrustedClients: new Set(biddingClientId ? [biddingClientId] : []),
-      clientPrivileges: async () => false,
+      clientPrivileges: async () => process.env.BIDDING_OIDC_PROVISIONING === "true",
     }),
   ],
 });
