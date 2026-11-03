@@ -21,6 +21,20 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    sendResetPassword: ({ user, url }) => {
+      mailer.sendMail({
+        from: process.env.SMTP_FROM ?? "Central Identity <identity@localhost>",
+        to: user.email,
+        subject: "Reset your Central Identity password",
+        text: `Reset your password using this one-time link: ${url}`,
+      }, (error) => {
+        if (error) {
+          console.error(JSON.stringify({ event: "email.delivery.failure", action: "password_reset" }));
+        }
+      });
+    },
   },
   emailVerification: {
     sendOnSignUp: true,

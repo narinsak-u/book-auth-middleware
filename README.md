@@ -30,6 +30,8 @@ For browsers with a separate certificate store, import `central-identity-root.cr
 
 Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open the verification link in Mailpit, then sign in. The provider requires email verification before password sign-in. A successful sign-in establishes a database-backed Central SSO Session in a secure, host-only cookie.
 
+To recover a forgotten password, use **Forgot your password?** on the sign-in page and submit the account email. The page gives the same confirmation whether or not that address is registered; check Mailpit for the reset link. Open it, choose a new password, and sign in with it. Reset links are one-time and expire after one hour; only the link is emailed, never the password.
+
 ## Verify the public behavior
 
 With Compose running and the local CA trusted:
@@ -40,7 +42,7 @@ curl https://auth.127.0.0.1.nip.io/health/ready
 bun run test
 ```
 
-The Bun test uses the provider's HTTP API and Mailpit's capture API to register, prove unverified sign-in is refused, follow the actual email verification link, sign in, retrieve the Central SSO Session across a Docker Compose provider restart, and prove sign-out invalidates it. It creates a unique test address on each run and restarts the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
+The Bun test uses the provider's HTTP API and Mailpit's capture API to register, prove unverified sign-in is refused, follow the actual email verification link, sign in, retrieve the Central SSO Session across a Docker Compose provider restart, and prove sign-out invalidates it. It also verifies the recovery UI, requests a reset for a verified identity and an unknown address, follows the delivered Mailpit link, proves the reset page accepts the new password only once, rejects the old password, and allows sign-in with the new password. It creates unique test addresses on each run and restarts the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
 
 To manually check persistence, sign in in a browser, then run `docker compose restart auth` and reload the provider; the existing session remains valid while the database volume is intact. Sign out to prove an invalidated session is rejected. Sessions expire after seven days; an expired cookie is rejected by Better Auth.
 
