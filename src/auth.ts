@@ -23,7 +23,7 @@ export const auth = betterAuth({
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
-    sendResetPassword: ({ user, url }) => {
+    sendResetPassword: async ({ user, url }) => {
       mailer.sendMail({
         from: process.env.SMTP_FROM ?? "Central Identity <identity@localhost>",
         to: user.email,
