@@ -11,3 +11,8 @@ bidding.127.0.0.1.sslip.io {
   tls internal
   reverse_proxy host.docker.internal:5173
 }
+
+reading.lvh.me {
+  tls internal
+  reverse_proxy host.docker.internal:3000
+}

@@ -7,6 +7,7 @@ import { db } from "./db";
 import * as schema from "./schema";
 const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
 const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
+const readingClientId = process.env.READING_OIDC_CLIENT_ID;
 const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST ?? "localhost",
   port: Number(process.env.SMTP_PORT ?? 1025),
@@ -56,7 +57,7 @@ export const auth = betterAuth({
       loginPage: "/",
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
-      cachedTrustedClients: new Set(biddingClientId ? [biddingClientId] : []),
+      cachedTrustedClients: new Set([biddingClientId, readingClientId].filter((id): id is string => Boolean(id))),
       clientPrivileges: async ({ action }) =>
         action === "create" && process.env.BIDDING_OIDC_PROVISIONING === "true",
     }),
