@@ -82,16 +82,24 @@ describe("central identity public HTTP behavior", () => {
       if (!ready) await Bun.sleep(100);
     }
     expect(ready).toBe(true);
-    const restored = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
-    expect(await restored.json()).toMatchObject({ user: { email } });
-
+    const freshLogin = await fetch(`${provider}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    expect(freshLogin.ok).toBe(true);
+    const freshCookies = freshLogin.headers.getSetCookie();
+    const freshCookie = freshCookies.map((value) => value.split(";", 1)[0]).join("; ");
+    const freshSession = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie: freshCookie } });
+    expect(freshSession.status).toBe(200);
+    expect(await freshSession.json()).toMatchObject({ user: { email }, session: { token: expect.any(String) } });
 
     const signedOut = await fetch(`${provider}/api/auth/sign-out`, {
       method: "POST",
-      headers: { cookie, origin: new URL(provider).origin, "content-type": "application/json" },
+      headers: { cookie: freshCookie, origin: new URL(provider).origin, "content-type": "application/json" },
     });
     expect(signedOut.ok).toBe(true);
-    const invalidated = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
+    const invalidated = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie: freshCookie } });
     expect(await invalidated.json()).toBeNull();
   }, 60_000);
 });
