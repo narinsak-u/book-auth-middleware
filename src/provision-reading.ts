@@ -3,7 +3,7 @@ import { closeDatabase } from "./db";
 process.env.BIDDING_OIDC_PROVISIONING = "true";
 const { auth } = await import("./auth");
 const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
-const redirectURI = "https://reading.lvh.me/api/auth/callback/central-identity";
+const redirectURI = "https://reading.lvh.me/api/auth/oauth2/callback/central-identity";
 
 try {
   const context = await auth.$context;
