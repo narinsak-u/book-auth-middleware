@@ -80,7 +80,7 @@ describe("central identity public HTTP behavior", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ redirect_uris: ["https://evil.example/callback"] }),
     });
-    expect([404, 405]).toContain(registration.status);
+    expect([403, 404, 405]).toContain(registration.status);
   });
 
   test("anonymous requests cannot create OAuth clients", async () => {

@@ -18,6 +18,7 @@
 # misc
 .DS_Store
 *.pem
+central-identity-root.crt
 
 # debug
 npm-debug.log*
