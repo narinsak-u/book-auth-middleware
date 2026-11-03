@@ -230,8 +230,8 @@ describe("central identity public HTTP behavior", () => {
     });
     const destination = response.headers.get("location");
     expect(response.status).toBe(403);
-    expect(destination && new URL(destination).href).not.toContain("bidding.127.0.0.1.sslip.io");
-    expect(destination && new URL(destination).searchParams.has("code")).toBe(false);
+    expect(destination ?? "").not.toContain("bidding.127.0.0.1.sslip.io");
+    expect(destination ? new URL(destination).searchParams.has("code") : false).toBe(false);
 
     const session = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
     expect(session.ok).toBe(true);
