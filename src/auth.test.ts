@@ -88,7 +88,7 @@ describe("central identity public HTTP behavior", () => {
 
     const signedOut = await fetch(`${provider}/api/auth/sign-out`, {
       method: "POST",
-      headers: { cookie, "content-type": "application/json" },
+      headers: { cookie, origin: new URL(provider).origin, "content-type": "application/json" },
     });
     expect(signedOut.ok).toBe(true);
     const invalidated = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
