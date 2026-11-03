@@ -72,6 +72,16 @@ NODE_EXTRA_CA_CERTS=../book-auth-middleware/central-identity-root.crt VITE_OIDC_
 
 The test drives the public HTTPS browser redirect and confirms the resulting local session. Install Chromium once with `bunx playwright install chromium` (on an unsupported Ubuntu 26.04 host, use `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 bunx playwright install chromium`). The Caddy CA trust setup above is required; local sign-in credentials and client secrets stay in ignored `.env` files.
 
+
+## Disabling a Central Identity
+
+An operator can prevent a Central Identity from starting new OIDC authorizations, including when its Central SSO Session already exists:
+
+```sh
+CENTRAL_IDENTITY_EMAIL='person@example.test' bun run disable:central-identity
+```
+
+Run this local CLI only with operator access to the provider database. There is no user-facing disable endpoint. The command does not revoke the Central SSO Session or any Application Session already issued by Book Bidding or another application. Those application sessions remain usable until their own expiry or the application's independent revocation; disabling only blocks new OIDC authorization grants.
 To recover a forgotten password, use **Forgot your password?** on the sign-in page and submit the account email. The page gives the same confirmation whether or not that address is registered; check Mailpit for the reset link. Open it, choose a new password, and sign in with it. Reset links are one-time and expire after one hour; only the link is emailed, never the password.
 
 ## Verify the public behavior
@@ -89,7 +99,7 @@ set +a
 bun run test
 ```
 
-The Bun suite uses only public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It also uses Mailpit to verify real Central Identity users and test password recovery for verified and unknown addresses, follow the actual verification and reset links, and confirm one-time reset links reject reuse and the old password. The OIDC protocol test requires the provisioned client ID and secret exported from `../book-bidding/.env`. Tests create unique addresses and restart the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
+The Bun suite uses public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It verifies through the public OIDC authorization endpoint that an operator-disabled identity with an existing Central SSO Session cannot receive a new code, while that provider session remains active. The test invokes the operator-only CLI against the same database; it requires the provisioned client ID and secret exported from `../book-bidding/.env`. Tests create unique addresses and restart the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
 
 To manually check persistence, sign in in a browser, then run `docker compose restart auth` and reload the provider; the existing session remains valid while the database volume is intact. Sign out to prove an invalidated session is rejected. Sessions expire after seven days; an expired cookie is rejected by Better Auth.
 
