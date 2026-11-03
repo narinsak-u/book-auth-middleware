@@ -2,7 +2,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import nodemailer from "nodemailer";
 import { db } from "./db";
-
+import * as schema from "./schema";
 const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
 const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST ?? "localhost",
@@ -15,6 +15,7 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars",
   trustedOrigins: [baseURL],
+  database: drizzleAdapter(db, { provider: "pg", schema }),
   advanced: { useSecureCookies: true },
   session: { expiresIn: 7 * 24 * 60 * 60 },
   emailAndPassword: {
