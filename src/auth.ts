@@ -1,9 +1,12 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
+import { jwt } from "better-auth/plugins";
 import nodemailer from "nodemailer";
 import { db } from "./db";
 import * as schema from "./schema";
 const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
+const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
 const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST ?? "localhost",
   port: Number(process.env.SMTP_PORT ?? 1025),
@@ -33,4 +36,13 @@ export const auth = betterAuth({
       });
     },
   },
+  plugins: [
+    jwt(),
+    oauthProvider({
+      loginPage: "/",
+      scopes: ["openid", "email", "profile"],
+      cachedTrustedClients: new Set(biddingClientId ? [biddingClientId] : []),
+      clientPrivileges: async () => false,
+    }),
+  ],
 });

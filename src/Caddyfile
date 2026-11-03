@@ -6,3 +6,8 @@ auth.127.0.0.1.nip.io {
   tls internal
   reverse_proxy auth:3000
 }
+
+bidding.127.0.0.1.sslip.io {
+  tls internal
+  reverse_proxy host.docker.internal:5173
+}

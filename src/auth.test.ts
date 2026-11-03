@@ -5,10 +5,10 @@ const inbox = process.env.TEST_MAILPIT_URL ?? "http://localhost:8025";
 const email = `central-${crypto.randomUUID()}@example.test`;
 const password = "local-proof-password-123";
 
-async function verificationUrl() {
+async function verificationUrl(address: string) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const found = await fetch(`${inbox}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
+    const found = await fetch(`${inbox}/api/v1/search?query=${encodeURIComponent(`to:${address}`)}`);
     if (found.ok) {
       const result = await found.json() as { messages?: Array<{ ID: string }> };
       const message = result.messages?.[0];
@@ -26,7 +26,150 @@ async function verificationUrl() {
   throw new Error("Verification email did not arrive in Mailpit");
 }
 
+async function signIn(address: string) {
+  const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "OIDC Protocol User", email: address, password }),
+  });
+  expect(signup.ok).toBe(true);
+  const verified = await fetch(await verificationUrl(address), { redirect: "manual" });
+  expect([302, 303]).toContain(verified.status);
+  const response = await fetch(`${provider}/api/auth/sign-in/email`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: address, password }),
+  });
+  expect(response.ok).toBe(true);
+  return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
+}
+
 describe("central identity public HTTP behavior", () => {
+  test("publishes canonical OIDC discovery and public signing keys", async () => {
+    const discovery = await fetch(`${provider}/.well-known/openid-configuration`);
+    expect(discovery.status).toBe(200);
+    const metadata = await discovery.json();
+    expect(metadata.issuer).toBe(provider);
+    expect(metadata.authorization_endpoint).toBe(`${provider}/api/auth/oauth2/authorize`);
+    expect(metadata.token_endpoint).toBe(`${provider}/api/auth/oauth2/token`);
+    expect(metadata.jwks_uri).toBe(`${provider}/api/auth/jwks`);
+    const keys = await fetch(metadata.jwks_uri);
+    expect(keys.status).toBe(200);
+    expect((await keys.json()).keys.length).toBeGreaterThan(0);
+  });
+
+  test("rejects unknown clients, unregistered redirects, and dynamic registration", async () => {
+    const unknown = await fetch(`${provider}/api/auth/oauth2/authorize?response_type=code&client_id=unknown&redirect_uri=https%3A%2F%2Fevil.example%2Fcallback&scope=openid&state=state&code_challenge=challenge&code_challenge_method=S256`, { redirect: "manual" });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.text()).toContain("invalid_client");
+
+    const registration = await fetch(`${provider}/api/auth/oauth2/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ redirect_uris: ["https://evil.example/callback"] }),
+    });
+    expect([404, 405]).toContain(registration.status);
+  });
+
+  test("anonymous requests cannot create OAuth clients", async () => {
+    const response = await fetch(`${provider}/api/auth/oauth2/create-client`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ redirect_uris: ["https://evil.example/callback"] }),
+    });
+    expect([401, 403]).toContain(response.status);
+  });
+  test("enforces registered redirects, S256 PKCE, single-use codes, and ordinary-user client denial", async () => {
+    const clientId = process.env.BIDDING_OIDC_CLIENT_ID;
+    const clientSecret = process.env.BIDDING_OIDC_CLIENT_SECRET;
+    expect(clientId).toBeTruthy();
+    expect(clientSecret).toBeTruthy();
+    const redirectURI = "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity";
+    const cookie = await signIn(`oidc-${crypto.randomUUID()}@example.test`);
+    const authorize = async (verifier: string) => {
+      const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(challengeBytes)))
+        .replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+      const state = crypto.randomUUID();
+      const nonce = crypto.randomUUID();
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: clientId!,
+        redirect_uri: redirectURI,
+        scope: "openid email profile",
+        state,
+        nonce,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      });
+      const response = await fetch(`${provider}/api/auth/oauth2/authorize?${query}`, {
+        headers: { cookie },
+        redirect: "manual",
+      });
+      expect([302, 303]).toContain(response.status);
+      const destination = new URL(response.headers.get("location")!);
+      expect(destination.origin + destination.pathname).toBe(redirectURI);
+      expect(destination.searchParams.get("state")).toBe(state);
+      expect(destination.searchParams.get("iss")).toBe(provider);
+      return destination.searchParams.get("code")!;
+    };
+    const exchange = (code: string, verifier: string) => fetch(`${provider}/api/auth/oauth2/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectURI,
+        code_verifier: verifier,
+      }),
+    });
+
+    const firstVerifier = crypto.randomUUID() + crypto.randomUUID();
+    const firstCode = await authorize(firstVerifier);
+    const token = await exchange(firstCode, firstVerifier);
+    expect(token.status).toBe(200);
+    const tokenBody = await token.json();
+    expect(tokenBody.id_token).toBeTruthy();
+    const replay = await exchange(firstCode, firstVerifier);
+    expect(replay.status).toBe(400);
+    expect(await replay.text()).toContain("invalid_grant");
+
+    const secondVerifier = crypto.randomUUID() + crypto.randomUUID();
+    const secondCode = await authorize(secondVerifier);
+    const wrongProof = await exchange(secondCode, crypto.randomUUID() + crypto.randomUUID());
+    expect(wrongProof.status).toBe(400);
+    expect(await wrongProof.text()).toContain("invalid_grant");
+
+    const badRedirect = await fetch(`${provider}/api/auth/oauth2/authorize?${new URLSearchParams({
+      response_type: "code",
+      client_id: clientId!,
+      redirect_uri: "https://evil.example/callback",
+      scope: "openid",
+      state: crypto.randomUUID(),
+      nonce: crypto.randomUUID(),
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+    })}`, { headers: { cookie }, redirect: "manual" });
+    expect([400, 401]).toContain(badRedirect.status);
+    expect(badRedirect.headers.get("location") ?? "").not.toContain("evil.example");
+
+    const deniedActions = [
+      fetch(`${provider}/api/auth/oauth2/create-client`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [redirectURI] }) }),
+      fetch(`${provider}/api/auth/oauth2/get-clients`, { headers: { cookie } }),
+      fetch(`${provider}/api/auth/oauth2/get-client?client_id=${clientId}`, { headers: { cookie } }),
+      fetch(`${provider}/api/auth/oauth2/update-client`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ client_id: clientId, update: { redirect_uris: [redirectURI] } }) }),
+      fetch(`${provider}/api/auth/oauth2/client/rotate-secret`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ client_id: clientId }) }),
+      fetch(`${provider}/api/auth/oauth2/delete-client`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ client_id: clientId }) }),
+    ];
+    for (const action of await Promise.all(deniedActions)) {
+      expect([401, 403]).toContain(action.status);
+    }
+  }, 60_000);
+
+
   test("liveness and readiness respond while the database is available", async () => {
     const live = await fetch(`${provider}/health/live`);
     expect(live.status).toBe(200);
@@ -52,7 +195,7 @@ describe("central identity public HTTP behavior", () => {
     });
     expect(denied.status).toBe(403);
 
-    const verified = await fetch(await verificationUrl(), { redirect: "manual" });
+    const verified = await fetch(await verificationUrl(email), { redirect: "manual" });
     expect([302, 303]).toContain(verified.status);
 
     const signedIn = await fetch(`${provider}/api/auth/sign-in/email`, {

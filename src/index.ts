@@ -43,9 +43,10 @@ if (message.has("error")) status.textContent = "Email verification failed. Reque
 else if (message.has("verified")) status.textContent = "Email verified. You can now sign in.";
 async function submit(form, endpoint) {
   const values = Object.fromEntries(new FormData(form));
+  const oauthQuery = new URLSearchParams(location.search).get("oauth_query");
   const response = await fetch("/api/auth/" + endpoint, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...values, callbackURL: location.origin })
+    body: JSON.stringify({ ...values, callbackURL: location.href, ...(oauthQuery ? { oauth_query: oauthQuery } : {}) })
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -54,10 +55,14 @@ async function submit(form, endpoint) {
       : "Request failed. Check the details and try again.";
     return;
   }
-  status.textContent = endpoint === "sign-up/email"
-    ? "Check the local test inbox for your verification link."
-    : "Signed in.";
-  if (endpoint === "sign-in/email") await refreshSession();
+  if (endpoint === "sign-up/email") {
+    status.textContent = "Check the local test inbox for your verification link.";
+  } else {
+    status.textContent = "Signed in.";
+    if (result.url) location.assign(result.url);
+    else if (oauthQuery) location.reload();
+    else await refreshSession();
+  }
 }
 document.querySelector("#register").addEventListener("submit", event => {
   event.preventDefault(); submit(event.currentTarget, "sign-up/email");

@@ -5,12 +5,14 @@
     "test": "bun test src/auth.test.ts",
     "dev": "bun run --watch src/index.ts",
     "start": "bun src/index.ts",
+    "provision:bidding": "bun src/provision-bidding.ts",
     "db:generate": "drizzle-kit generate --config=src/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=src/drizzle.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.15",
+    "@better-auth/oauth-provider": "1.7.15",
     "better-auth": "1.7.15",
     "drizzle-orm": "0.45.4",
     "elysia": "1.4.30",
