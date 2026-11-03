@@ -70,6 +70,8 @@ VITE_OIDC_TEST_EMAIL='new-address@example.test' VITE_OIDC_TEST_PASSWORD='the ver
 
 The test drives the public HTTPS browser redirect and confirms the resulting local session. The Caddy CA trust setup above is required; local sign-in credentials and client secrets stay in ignored `.env` files.
 
+To recover a forgotten password, use **Forgot your password?** on the sign-in page and submit the account email. The page gives the same confirmation whether or not that address is registered; check Mailpit for the reset link. Open it, choose a new password, and sign in with it. Reset links are one-time and expire after one hour; only the link is emailed, never the password.
+
 ## Verify the public behavior
 
 With Compose running and the local CA trusted:
@@ -86,7 +88,7 @@ set +a
 bun run test
 ```
 
-The Bun suite uses only public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It also uses Mailpit to verify real Central Identity users, validate the authorization-code flow and ID token, and confirm that provider restart preserves local data. It requires the provisioned `BIDDING_OIDC_CLIENT_ID` and app client secret exported from `../bidding-4/.env`; it creates unique test identities and restarts the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override defaults.
+The Bun suite uses only public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It also uses Mailpit to verify real Central Identity users and test password recovery for verified and unknown addresses, follow the actual verification and reset links, and confirm one-time reset links reject reuse and the old password. The OIDC protocol test requires the provisioned client ID and secret exported from `../bidding-4/.env`. Tests create unique addresses and restart the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
 
 To manually check persistence, sign in in a browser, then run `docker compose restart auth` and reload the provider; the existing session remains valid while the database volume is intact. Sign out to prove an invalidated session is rejected. Sessions expire after seven days; an expired cookie is rejected by Better Auth.
 
