@@ -31,6 +31,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_FROM: ${SMTP_FROM:-Central Identity <identity@localhost>}
+      BIDDING_OIDC_CLIENT_ID: ${BIDDING_OIDC_CLIENT_ID:-}
       PORT: 3000
     volumes:
       - .:/app
@@ -55,6 +56,8 @@ services:
       - ./src/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       auth:
         condition: service_healthy

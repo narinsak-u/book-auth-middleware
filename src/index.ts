@@ -55,14 +55,18 @@ if (message.get("error") === "INVALID_TOKEN") status.textContent = "This reset l
 else if (message.has("error")) status.textContent = "Email verification failed. Request a new message or try again.";
 else if (message.has("verified")) status.textContent = "Email verified. You can now sign in.";
 async function submit(form, endpoint) {
-  const body = Object.fromEntries(new FormData(form));
-  if (endpoint === "request-password-reset") body.redirectTo = location.origin;
-  else if (endpoint === "reset-password") body.token = resetToken;
-  else body.callbackURL = location.origin;
+  const values = Object.fromEntries(new FormData(form));
+  const oauthQuery = new URLSearchParams(location.search).get("oauth_query");
+  const body = endpoint === "request-password-reset"
+    ? { ...values, redirectTo: location.origin }
+    : endpoint === "reset-password"
+      ? { ...values, token: resetToken }
+      : { ...values, callbackURL: location.href, ...(oauthQuery ? { oauth_query: oauthQuery } : {}) };
   const response = await fetch("/api/auth/" + endpoint, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify(body)
   });
+  const result = await response.json().catch(() => ({}));
   if (!response.ok) {
     status.textContent = endpoint === "sign-in/email" && response.status === 403
       ? "Verify your email using the message sent to your inbox before signing in."
@@ -71,14 +75,18 @@ async function submit(form, endpoint) {
         : "Request failed. Check the details and try again.";
     return;
   }
-  status.textContent = endpoint === "sign-up/email"
-    ? "Check the local test inbox for your verification link."
-    : endpoint === "request-password-reset"
-      ? "If an account matches that email, a reset link will be sent."
-      : endpoint === "reset-password"
-        ? "Password updated. You can now sign in."
-        : "Signed in.";
-  if (endpoint === "sign-in/email") await refreshSession();
+  if (endpoint === "sign-up/email") {
+    status.textContent = "Check the local test inbox for your verification link.";
+  } else if (endpoint === "request-password-reset") {
+    status.textContent = "If an account matches that email, a reset link will be sent.";
+  } else if (endpoint === "reset-password") {
+    status.textContent = "Password updated. You can now sign in.";
+  } else {
+    status.textContent = "Signed in.";
+    if (result.url) location.assign(result.url);
+    else if (oauthQuery) location.reload();
+    else await refreshSession();
+  }
 }
 document.querySelector("#register").addEventListener("submit", event => {
   event.preventDefault(); submit(event.currentTarget, "sign-up/email");
