@@ -6,7 +6,8 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun src/index.ts",
     "db:generate": "drizzle-kit generate --config=src/drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config=src/drizzle.config.ts"
+    "db:migrate": "drizzle-kit migrate --config=src/drizzle.config.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.15",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/nodemailer": "8.0.2",
     "bun-types": "1.4.4",
-    "drizzle-kit": "0.31.11"
+    "drizzle-kit": "0.31.11",
+    "typescript": "5.9.3"
   }
 }
