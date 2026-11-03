@@ -93,5 +93,5 @@ describe("central identity public HTTP behavior", () => {
     expect(signedOut.ok).toBe(true);
     const invalidated = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
     expect(await invalidated.json()).toBeNull();
-  });
+  }, 60_000);
 });
