@@ -47,6 +47,17 @@ async function signIn(address: string) {
   expect(response.ok).toBe(true);
   return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
 }
+async function disableIdentity(address: string) {
+  const process = Bun.spawn(["bun", "run", "disable:central-identity"], {
+    cwd: import.meta.dir + "/..",
+    env: { ...process.env, CENTRAL_IDENTITY_EMAIL: address },
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const exitCode = await process.exited;
+  if (exitCode !== 0) throw new Error(await new Response(process.stderr).text());
+}
+
 describe("central identity public HTTP behavior", () => {
   test("publishes canonical OIDC discovery and public signing keys", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
@@ -191,6 +202,37 @@ describe("central identity public HTTP behavior", () => {
     for (const action of await Promise.all(deniedActions)) {
       expect([401, 403]).toContain(action.status);
     }
+  }, 60_000);
+
+  test("operator-disabled identity cannot start a new grant with an existing SSO session", async () => {
+    const clientId = process.env.BIDDING_OIDC_CLIENT_ID;
+    expect(clientId).toBeTruthy();
+    const address = `disabled-${crypto.randomUUID()}@example.test`;
+    const cookie = await signIn(address);
+    await disableIdentity(address);
+
+    const query = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId!,
+      redirect_uri: "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity",
+      scope: "openid email profile",
+      state: crypto.randomUUID(),
+      nonce: crypto.randomUUID(),
+      code_challenge: "operator-disabled-identity-challenge",
+      code_challenge_method: "S256",
+    });
+    const response = await fetch(`${provider}/api/auth/oauth2/authorize?${query}`, {
+      headers: { cookie },
+      redirect: "manual",
+    });
+    const destination = response.headers.get("location");
+    expect(response.status).toBe(403);
+    expect(destination && new URL(destination).href).not.toContain("bidding.127.0.0.1.sslip.io");
+    expect(destination && new URL(destination).searchParams.has("code")).toBe(false);
+
+    const session = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
+    expect(session.ok).toBe(true);
+    expect((await session.json()).user.email).toBe(address);
   }, 60_000);
 
 

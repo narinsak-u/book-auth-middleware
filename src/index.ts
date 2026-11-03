@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
-import { databaseReady } from "./db";
+import { databaseReady, db } from "./db";
+import { user } from "./schema";
+
 
 const page = `<!doctype html>
 <html lang="en">
@@ -120,6 +123,19 @@ refreshSession();
 </html>`;
 
 const app = new Elysia()
+  .onRequest(async ({ request }) => {
+    if (new URL(request.url).pathname !== "/api/auth/oauth2/authorize") return;
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) return;
+    const [identity] = await db
+      .select({ disabled: user.disabled })
+      .from(user)
+      .where(eq(user.id, session.user.id))
+      .limit(1);
+    if (identity?.disabled) {
+      return new Response("Central Identity is disabled", { status: 403 });
+    }
+  })
   .onAfterHandle(({ request, response }) => {
     if (
       new URL(request.url).pathname === "/api/auth/sign-in/email" &&
