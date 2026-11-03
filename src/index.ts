@@ -34,29 +34,50 @@ const page = `<!doctype html>
     <label for="signin-password">Password</label><input id="signin-password" name="password" type="password" autocomplete="current-password" required>
     <button>Sign in</button>
   </form>
+  <form id="forgot-password">
+    <h2>Forgot your password?</h2>
+    <label for="recovery-email">Email</label><input id="recovery-email" name="email" type="email" autocomplete="email" required>
+    <button>Send reset link</button>
+  </form>
+  <form id="reset-password" hidden>
+    <h2>Choose a new password</h2>
+    <label for="new-password">New password</label><input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+    <button>Reset password</button>
+  </form>
   <button id="signout" hidden>Sign out</button>
 </main>
 <script>
 const status = document.querySelector("#status");
 const message = new URLSearchParams(location.search);
-if (message.has("error")) status.textContent = "Email verification failed. Request a new message or try again.";
+const resetToken = message.get("token");
+document.querySelector("#reset-password").hidden = !resetToken;
+if (message.get("error") === "INVALID_TOKEN") status.textContent = "This reset link is invalid or expired. Request a new one.";
+else if (message.has("error")) status.textContent = "Email verification failed. Request a new message or try again.";
 else if (message.has("verified")) status.textContent = "Email verified. You can now sign in.";
 async function submit(form, endpoint) {
-  const values = Object.fromEntries(new FormData(form));
+  const body = Object.fromEntries(new FormData(form));
+  if (endpoint === "request-password-reset") body.redirectTo = location.origin;
+  else if (endpoint === "reset-password") body.token = resetToken;
+  else body.callbackURL = location.origin;
   const response = await fetch("/api/auth/" + endpoint, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...values, callbackURL: location.origin })
+    body: JSON.stringify(body)
   });
-  const result = await response.json().catch(() => ({}));
   if (!response.ok) {
     status.textContent = endpoint === "sign-in/email" && response.status === 403
       ? "Verify your email using the message sent to your inbox before signing in."
-      : "Request failed. Check the details and try again.";
+      : endpoint === "reset-password"
+        ? "This reset link is invalid or expired. Request a new one."
+        : "Request failed. Check the details and try again.";
     return;
   }
   status.textContent = endpoint === "sign-up/email"
     ? "Check the local test inbox for your verification link."
-    : "Signed in.";
+    : endpoint === "request-password-reset"
+      ? "If an account matches that email, a reset link will be sent."
+      : endpoint === "reset-password"
+        ? "Password updated. You can now sign in."
+        : "Signed in.";
   if (endpoint === "sign-in/email") await refreshSession();
 }
 document.querySelector("#register").addEventListener("submit", event => {
@@ -64,6 +85,12 @@ document.querySelector("#register").addEventListener("submit", event => {
 });
 document.querySelector("#signin").addEventListener("submit", event => {
   event.preventDefault(); submit(event.currentTarget, "sign-in/email");
+});
+document.querySelector("#forgot-password").addEventListener("submit", event => {
+  event.preventDefault(); submit(event.currentTarget, "request-password-reset");
+});
+document.querySelector("#reset-password").addEventListener("submit", event => {
+  event.preventDefault(); submit(event.currentTarget, "reset-password");
 });
 async function refreshSession() {
   const response = await fetch("/api/auth/get-session");
