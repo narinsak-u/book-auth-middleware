@@ -1,0 +1,8 @@
+{
+  auto_https disable_redirects
+}
+
+auth.127.0.0.1.nip.io {
+  tls internal
+  reverse_proxy auth:3000
+}

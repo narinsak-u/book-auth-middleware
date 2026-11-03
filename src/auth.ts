@@ -1,0 +1,35 @@
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { betterAuth } from "better-auth";
+import nodemailer from "nodemailer";
+import { db } from "./db";
+
+const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST ?? "localhost",
+  port: Number(process.env.SMTP_PORT ?? 1025),
+  secure: false,
+});
+
+export const auth = betterAuth({
+  appName: "Central Identity",
+  baseURL,
+  secret: process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars",
+  trustedOrigins: [baseURL],
+  advanced: { useSecureCookies: true },
+  session: { expiresIn: 7 * 24 * 60 * 60 },
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await mailer.sendMail({
+        from: process.env.SMTP_FROM ?? "Central Identity <identity@localhost>",
+        to: user.email,
+        subject: "Verify your Central Identity email",
+        text: `Verify your email address: ${url}`,
+      });
+    },
+  },
+});
