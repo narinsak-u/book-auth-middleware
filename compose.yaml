@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:17.5-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-central}
+      POSTGRES_USER: ${POSTGRES_USER:-central}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-central-local-only}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - central-db:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports:
+      - "127.0.0.1:8025:8025"
+    expose:
+      - "1025"
+
+  auth:
+    image: oven/bun:1.2.22
+    working_dir: /app
+    command: ["sh", "-c", "bun install --frozen-lockfile && bun run db:migrate && bun run start"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://central:central-local-only@db:5432/central}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://auth.127.0.0.1.nip.io}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-only-change-me-before-any-deployment-32chars}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: ${SMTP_FROM:-Central Identity <identity@localhost>}
+      PORT: 3000
+    volumes:
+      - .:/app
+      - auth-node-modules:/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    ports:
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:443:443/udp"
+    volumes:
+      - ./src/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      auth:
+        condition: service_healthy
+
+volumes:
+  central-db:
+  auth-node-modules:
+  caddy-data:
+  caddy-config:
