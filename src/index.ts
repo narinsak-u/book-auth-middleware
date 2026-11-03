@@ -83,7 +83,8 @@ async function submit(form, endpoint) {
     status.textContent = "Password updated. You can now sign in.";
   } else {
     status.textContent = "Signed in.";
-    if (result.url) location.assign(result.url);
+    if (message.has("sig") && message.has("client_id")) location.assign("/api/auth/oauth2/authorize" + location.search);
+    else if (result.url) location.assign(result.url);
     else if (oauthQuery) location.reload();
     else await refreshSession();
   }
