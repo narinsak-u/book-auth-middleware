@@ -1,5 +1,4 @@
 import { auth } from "./auth";
-
 const redirectURI = "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity";
 const client = await auth.api.adminCreateOAuthClient({
   headers: new Headers(),

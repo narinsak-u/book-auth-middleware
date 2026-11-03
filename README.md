@@ -32,17 +32,17 @@ Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open t
 
 ## Book Bidding OIDC demo
 
-Use the sibling worktree at `../bidding-4` with the exact public callback `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
+Use the sibling repository at `../book-bidding` with the exact public callback `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
 
 ```sh
 cp .env.example .env
-cp ../bidding-4/.env.example ../bidding-4/.env
-printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -base64 32)" >> ../bidding-4/.env
+cp ../book-bidding/.env.example ../book-bidding/.env
+printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -base64 32)" >> ../book-bidding/.env
 docker compose --env-file .env up -d db mailpit
 docker compose --env-file .env run --rm --no-deps auth bun run provision:bidding
 ```
 
-The command prints a one-time client ID and secret. Before starting the provider, put only the printed client ID in `BIDDING_OIDC_CLIENT_ID` in this repository's ignored `.env`; put both printed credentials in `../bidding-4/.env` as `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET`. Keep both files private (`chmod 600 .env ../bidding-4/.env`) and do not commit or paste the secret elsewhere. The provider loads that ID into its trusted-client cache on startup; ordinary users cannot create, update, delete, list, read, or rotate OAuth clients, and dynamic registration is disabled.
+The command prints a one-time client ID and secret. Before starting the provider, put only the printed client ID in `BIDDING_OIDC_CLIENT_ID` in this repository's ignored `.env`; put both printed credentials in `../book-bidding/.env` as `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET`. Keep both files private (`chmod 600 .env ../book-bidding/.env`) and do not commit or paste the secret elsewhere. The provider loads that ID into its trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`, so an authenticated user can complete authorization without a separate consent screen; other untrusted clients are not provisioned. Ordinary users cannot create, update, delete, list, read, or rotate OAuth clients, and dynamic registration is disabled.
 
 Start the provider and TLS proxy:
 
@@ -50,10 +50,10 @@ Start the provider and TLS proxy:
 docker compose --env-file .env up --build -d
 ```
 
-Caddy serves the app's `bidding.127.0.0.1.sslip.io` host over HTTPS and proxies to the Vite server on port 5173. In a second terminal, start Book Bidding from `../bidding-4` using its local `.env`:
+Caddy serves the app's `bidding.127.0.0.1.sslip.io` host over HTTPS and proxies to the Vite server on port 5173. In a second terminal, start Book Bidding from `../book-bidding` using its local `.env`:
 
 ```sh
-cd ../bidding-4
+cd ../book-bidding
 npm install
 npm run db:migrate
 npm run dev -- --host 0.0.0.0
@@ -64,7 +64,7 @@ Register a new Central Identity at <https://auth.127.0.0.1.nip.io>, then follow 
 For the live browser test, use a newly verified central identity that has no existing Book Bidding user. Pass its credentials to the test runner:
 
 ```sh
-cd ../bidding-4
+cd ../book-bidding
 VITE_OIDC_TEST_EMAIL='new-address@example.test' VITE_OIDC_TEST_PASSWORD='the verified identity password' npm run test:unit -- --run src/tests/oidc-login.svelte.spec.ts
 ```
 
@@ -74,21 +74,20 @@ To recover a forgotten password, use **Forgot your password?** on the sign-in pa
 
 ## Verify the public behavior
 
-With Compose running and the local CA trusted:
+With Compose running from the auth repository root and the local CA trusted:
 
 ```sh
-cd ../auth-4
 curl https://auth.127.0.0.1.nip.io/health/live
 curl https://auth.127.0.0.1.nip.io/health/ready
 set -a
-. ../bidding-4/.env
+. ../book-bidding/.env
 BIDDING_OIDC_CLIENT_ID="$CENTRAL_OIDC_CLIENT_ID"
 BIDDING_OIDC_CLIENT_SECRET="$CENTRAL_OIDC_CLIENT_SECRET"
 set +a
 bun run test
 ```
 
-The Bun suite uses only public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It also uses Mailpit to verify real Central Identity users and test password recovery for verified and unknown addresses, follow the actual verification and reset links, and confirm one-time reset links reject reuse and the old password. The OIDC protocol test requires the provisioned client ID and secret exported from `../bidding-4/.env`. Tests create unique addresses and restart the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
+The Bun suite uses only public HTTP endpoints: it checks discovery/JWKS, unknown clients and redirects, failed S256 PKCE, authorization-code replay, disabled dynamic registration, and anonymous/ordinary-user client CRUD denial. It also uses Mailpit to verify real Central Identity users and test password recovery for verified and unknown addresses, follow the actual verification and reset links, and confirm one-time reset links reject reuse and the old password. The OIDC protocol test requires the provisioned client ID and secret exported from `../book-bidding/.env`. Tests create unique addresses and restart the `auth` container. `TEST_PROVIDER_URL` and `TEST_MAILPIT_URL` can override the defaults.
 
 To manually check persistence, sign in in a browser, then run `docker compose restart auth` and reload the provider; the existing session remains valid while the database volume is intact. Sign out to prove an invalidated session is rejected. Sessions expire after seven days; an expired cookie is rejected by Better Auth.
 
