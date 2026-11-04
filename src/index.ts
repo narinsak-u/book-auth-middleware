@@ -47,7 +47,8 @@ const page = `<!doctype html>
     <label for="new-password">New password</label><input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="8" required>
     <button>Reset password</button>
   </form>
-  <button id="signout" hidden>Sign out</button>
+  <p id="logout-explanation" hidden>Central sign-out ends your Central SSO Session only. Existing Book Bidding and Read in Peace Application Sessions remain active until you sign out in each app or they expire.</p>
+  <button id="signout" hidden>Sign out of Central Identity</button>
 </main>
 <script>
 const status = document.querySelector("#status");
@@ -110,12 +111,18 @@ async function refreshSession() {
   if (data?.user) {
     status.textContent = "Signed in as " + data.user.email;
     document.querySelector("#signout").hidden = false;
+    document.querySelector("#logout-explanation").hidden = false;
   }
 }
 document.querySelector("#signout").addEventListener("click", async () => {
-  await fetch("/api/auth/sign-out", { method: "POST" });
+  const response = await fetch("/api/auth/sign-out", { method: "POST" });
+  if (!response.ok) {
+    status.textContent = "Central sign-out failed. Try again.";
+    return;
+  }
   document.querySelector("#signout").hidden = true;
-  status.textContent = "Signed out.";
+  document.querySelector("#logout-explanation").hidden = true;
+  status.textContent = "Central SSO Session ended. Existing Application Sessions remain active in Book Bidding and Read in Peace.";
 });
 refreshSession();
 </script>

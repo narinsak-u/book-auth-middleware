@@ -30,6 +30,11 @@ For browsers with a separate certificate store, import `central-identity-root.cr
 
 Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open the verification link in Mailpit, then sign in. The provider requires email verification before password sign-in. A successful sign-in establishes a database-backed Central SSO Session in a secure, host-only cookie.
 
+**Sign out of Central Identity** on the provider page ends only the Central
+SSO Session. It prevents a fresh OIDC authorization from silently reusing that
+session, but it does not revoke already-issued Book Bidding or Read in Peace
+Application Sessions. Sign out in each application separately when needed.
+
 ## Book Bidding OIDC demo
 
 Use the sibling repository at `../book-bidding` with the exact public callback `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
