@@ -126,9 +126,68 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button" type="submit" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
         </form>
-        <div className="legacy-links"><p>Need to create an identity or reset your password?</p><a href="/legacy#register">Enrollment and recovery (temporary)</a></div>
+        <div className="legacy-links"><p>Need to create an identity or reset your password?</p><p><a href="/sign-up">Create a Central Identity</a></p><a href="/legacy#register">Enrollment and recovery (temporary)</a></div>
         <p className="recovery-back"><a href="/forgot-password">Forgot your password?</a></p>
         {mode === "sign-in" && <p className="direct-note">Signing in directly keeps you here. A Relying Party will be resumed only when Better Auth provides a valid authorization request.</p>}
+      </section>
+    </div>
+  </main>;
+}
+export function Enrollment() {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    const fields = new FormData(event.currentTarget);
+    try {
+      const { error } = await authClient.signUp.email({
+        email: String(fields.get("email")),
+        password: String(fields.get("password")),
+        name: String(fields.get("name")),
+        callbackURL: `${window.location.origin}/sign-in?verified=1`,
+      });
+      if (error) {
+        setError("This identity could not be created. Check the details or try again later.");
+      } else {
+        setSubmitted(true);
+      }
+    } catch {
+      setError("Enrollment could not reach Central Identity. Check your connection and try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <main className="portal-shell">
+    <header className="topbar"><Brand /><span className="secure-label">Local enrollment</span></header>
+    <div className="signin-layout">
+      <section className="welcome-panel" aria-labelledby="enrollment-welcome-title">
+        <p className="welcome-kicker">A local Central Identity</p>
+        <h1 id="enrollment-welcome-title">Create your identity.</h1>
+        <p>Verify your email before using your password to sign in. A Central Identity does not grant access to either application.</p>
+        <div className="privacy-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      </section>
+      <section className="form-panel" aria-labelledby="enrollment-title">
+        <p className="form-kicker">New identity</p>
+        <h2 id="enrollment-title">Sign up</h2>
+        {submitted ? <p className="form-status" role="status">If enrollment succeeded, a verification message has been sent. Open the link in that email before signing in.</p> : <>
+          <p className="form-intro">Create a local identity. Email verification is required before password sign-in.</p>
+          <form onSubmit={submit} aria-busy={pending}>
+            <label htmlFor="signup-name">Name</label>
+            <input id="signup-name" name="name" type="text" autoComplete="name" required disabled={pending} />
+            <label htmlFor="signup-email">Email address</label>
+            <input id="signup-email" name="email" type="email" autoComplete="email" required disabled={pending} />
+            <label htmlFor="signup-password">Password</label>
+            <input id="signup-password" name="password" type="password" autoComplete="new-password" required disabled={pending} />
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
+          </form>
+        </>}
+        <div className="legacy-links"><a href="/sign-in">Return to sign in</a></div>
       </section>
     </div>
   </main>;
