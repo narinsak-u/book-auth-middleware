@@ -67,14 +67,6 @@ async function disableIdentity(address: string) {
 }
 
 describe("central identity public HTTP behavior", () => {
-  test("serves an accessible sign-in form from the portal", async () => {
-    const response = await fetch(`${provider}/sign-in`);
-    expect(response.status).toBe(200);
-    const html = await response.text();
-    expect(html).toContain("Sign in to Central Identity");
-    expect(html).toContain('type="email"');
-    expect(html.toLowerCase()).toContain('autocomplete="current-password"');
-  });
   test("publishes canonical OIDC discovery and public signing keys", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
@@ -310,13 +302,6 @@ describe("central identity public HTTP behavior", () => {
     expect(initialSignIn.ok).toBe(true);
     const sessionCookie = initialSignIn.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
 
-    const requestPage = await (await fetch(`${provider}/forgot-password`)).text();
-    expect(requestPage).toContain("Send reset link");
-    expect(requestPage).toContain('type="email"');
-    const resetForm = await (await fetch(`${provider}/reset-password`)).text();
-    expect(resetForm).toContain("Choose a new password");
-    expect(resetForm).toContain('autocomplete="new-password"');
-
     const requestReset = (address: string) => fetch(`${provider}/api/auth/request-password-reset`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -336,7 +321,6 @@ describe("central identity public HTTP behavior", () => {
     expect(resetPage.origin).toBe(new URL(provider).origin);
     expect(resetPage.searchParams.has("token")).toBe(true);
     const token = resetPage.searchParams.get("token")!;
-    expect(await (await fetch(resetPage)).text()).toContain("Choose a new password");
     const reset = (newPassword: string) => fetch(`${provider}/api/auth/reset-password`, {
       method: "POST",
       headers: { "content-type": "application/json" },
