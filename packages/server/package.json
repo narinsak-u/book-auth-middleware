@@ -1,0 +1,29 @@
+{
+  "name": "@central-identity/server",
+  "private": true,
+  "scripts": {
+    "build": "bun build src/index.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.json",
+    "test": "bun test src/auth.test.ts",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "provision:bidding": "bun src/provision-bidding.ts",
+    "provision:reading": "bun src/provision-reading.ts",
+    "disable:central-identity": "bun src/disable-central-identity.ts"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.15",
+    "@better-auth/oauth-provider": "1.7.15",
+    "@central-identity/db": "workspace:*",
+    "better-auth": "1.7.15",
+    "drizzle-orm": "0.45.4",
+    "elysia": "1.4.30",
+    "nodemailer": "10.3.1",
+    "postgres": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2",
+    "bun-types": "1.4.4",
+    "typescript": "5.9.3"
+  }
+}

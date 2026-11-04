@@ -57,7 +57,7 @@ async function disableIdentity(address: string) {
     "-e", `CENTRAL_IDENTITY_EMAIL=${address}`,
     "auth", "bun", "run", "disable:central-identity",
   ], {
-    cwd: import.meta.dir + "/..",
+    cwd: new URL("../../../", import.meta.url).pathname,
     env: { ...process.env, DATABASE_URL: undefined },
     stdout: "ignore",
     stderr: "pipe",

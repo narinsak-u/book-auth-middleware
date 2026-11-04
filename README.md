@@ -16,7 +16,25 @@ The provider is served over HTTPS at `https://auth.127.0.0.1.nip.io`. That hostn
 docker compose --env-file .env.example up --build
 ```
 
-Compose runs PostgreSQL and Mailpit, applies the committed Drizzle migrations before starting the provider, then starts Caddy on port 443. PostgreSQL data is retained in the `central-db` volume across provider restarts. The test email inbox is at <http://localhost:8025>.
+The provider now uses Bun workspaces: `packages/server` contains the existing
+Elysia/Better Auth service and `packages/db` contains its existing Drizzle
+schema and migration history. The root `build`, `typecheck`, and `test`
+commands run through Turborepo. Compose runs PostgreSQL and Mailpit, runs the
+committed migrations as a separate command (and will not start the server if
+migration fails), then starts the provider and Caddy. PostgreSQL data remains
+in the existing `central-db` volume; never use `docker compose down -v` during
+this migration.
+
+Before applying any future database migration to a populated database, create
+and verify an operator-controlled backup, for example:
+
+```sh
+docker compose exec -T db pg_dump -U central -d central --format=custom > central-before-migration.dump
+pg_restore --list central-before-migration.dump
+```
+
+The workspace move adds no schema migration and does not recreate the database.
+The test email inbox is at <http://localhost:8025>.
 
 Export and trust Caddy's local CA once after Caddy has started:
 
@@ -161,7 +179,10 @@ Wait until PostgreSQL is healthy again before resuming requests.
 
 ## Database changes
 
-Committed SQL migrations are under `src/db/migrations` and are applied on every startup. After changing `src/schema.ts`, generate and commit a migration with:
+The existing SQL migrations and journal are under `packages/db/src/migrations`;
+they are applied by the explicit `bun run db:migrate` step before server
+startup. After changing `packages/db/src/schema.ts`, generate and commit a
+migration with:
 
 ```sh
 bun run db:generate
