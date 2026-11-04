@@ -30,6 +30,16 @@ async function verificationUrl(address: string) {
   return mailUrl(address, "Verify your Central Identity email");
 }
 
+async function signInExisting(address: string) {
+  const response = await fetch(`${provider}/api/auth/sign-in/email`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: address, password }),
+  });
+  expect(response.ok).toBe(true);
+  return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
+}
+
 async function signIn(address: string) {
   const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
     method: "POST",
@@ -39,13 +49,7 @@ async function signIn(address: string) {
   expect(signup.ok).toBe(true);
   const verified = await fetch(await verificationUrl(address), { redirect: "manual" });
   expect([302, 303]).toContain(verified.status);
-  const response = await fetch(`${provider}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: address, password }),
-  });
-  expect(response.ok).toBe(true);
-  return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
+  return signInExisting(address);
 }
 async function disableIdentity(address: string) {
   const child = Bun.spawn([
@@ -207,35 +211,63 @@ describe("central identity public HTTP behavior", () => {
     }
   }, 60_000);
 
-  test("operator-disabled identity cannot start a new grant with an existing SSO session", async () => {
+  test("operator disable revokes issued grants and Central SSO sessions", async () => {
     const clientId = process.env.BIDDING_OIDC_CLIENT_ID;
+    const clientSecret = process.env.BIDDING_OIDC_CLIENT_SECRET;
     expect(clientId).toBeTruthy();
+    expect(clientSecret).toBeTruthy();
     const address = `disabled-${crypto.randomUUID()}@example.test`;
     const cookie = await signIn(address);
-    await disableIdentity(address);
-
+    const redirectURI = "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity";
+    const verifier = crypto.randomUUID() + crypto.randomUUID();
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
     const query = new URLSearchParams({
       response_type: "code",
       client_id: clientId!,
-      redirect_uri: "https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity",
+      redirect_uri: redirectURI,
       scope: "openid email profile",
       state: crypto.randomUUID(),
       nonce: crypto.randomUUID(),
-      code_challenge: "operator-disabled-identity-challenge",
+      code_challenge: challenge,
       code_challenge_method: "S256",
     });
-    const response = await fetch(`${provider}/api/auth/oauth2/authorize?${query}`, {
+    const issued = await fetch(`${provider}/api/auth/oauth2/authorize?${query}`, {
       headers: { cookie },
       redirect: "manual",
     });
-    const destination = response.headers.get("location");
-    expect(response.status).toBe(403);
-    expect(destination ?? "").not.toContain("bidding.127.0.0.1.sslip.io");
-    expect(destination ? new URL(destination).searchParams.has("code") : false).toBe(false);
+    expect([302, 303]).toContain(issued.status);
+    const code = new URL(issued.headers.get("location")!).searchParams.get("code");
+    expect(code).toBeTruthy();
 
-    const session = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
-    expect(session.ok).toBe(true);
-    expect((await session.json()).user.email).toBe(address);
+    await disableIdentity(address);
+    const exchange = await fetch(`${provider}/api/auth/oauth2/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: redirectURI,
+        code_verifier: verifier,
+      }),
+    });
+    expect(exchange.status).toBe(400);
+    expect(await exchange.text()).toContain("invalid_grant");
+
+    const revokedSession = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
+    expect(await revokedSession.json()).toBeNull();
+
+    const freshCookie = await signInExisting(address);
+    const denied = await fetch(`${provider}/api/auth/oauth2/authorize?${query}`, {
+      headers: { cookie: freshCookie },
+      redirect: "manual",
+    });
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("location") ?? "").not.toContain("code=");
   }, 60_000);
 
 

@@ -144,17 +144,24 @@ const app = new Elysia()
     }
   })
   .onAfterHandle(({ request, response }) => {
-    if (
-      new URL(request.url).pathname === "/api/auth/sign-in/email" &&
-      response instanceof Response &&
-      !response.ok
-    ) {
+    if (!(response instanceof Response)) return;
+    const pathname = new URL(request.url).pathname;
+    if (pathname === "/api/auth/sign-in/email") {
       console.info(JSON.stringify({
-        event: "authentication.failure",
+        event: response.ok ? "authentication.success" : "authentication.failure",
         action: "password_sign_in",
         status: response.status,
       }));
+      return;
     }
+    if (pathname !== "/api/auth/oauth2/authorize" || response.status < 300 || response.status >= 400) return;
+    const destination = response.headers.get("location");
+    if (!destination || !new URL(destination, request.url).searchParams.has("code")) return;
+    console.info(JSON.stringify({
+      event: "authentication.success",
+      action: "oidc_authorization",
+      status: response.status,
+    }));
   })
   .get("/", () => new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } }))
   .get("/health/live", () => ({ status: "live" }))
