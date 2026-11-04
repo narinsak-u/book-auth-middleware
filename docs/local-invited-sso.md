@@ -8,11 +8,19 @@ invitation to a new address.
 
 ## 1. Start the provider and provision local clients
 
-Follow the provider's [local development setup](../README.md#local-development)
-to install dependencies, trust Caddy's local root certificate, and start the
-local stack. Keep `.env.keys` ignored/out of Git; committed `.env.development`
-and `.env.production` contain encrypted values. Do not copy or print key
-material. The public hosts are:
+From the provider repository root, install dependencies, trust Caddy's local
+root certificate, and start the encrypted development stack. `.env.keys` is
+ignored; keep it outside Git and back it up securely. The committed
+`.env.development` and `.env.production` contain encrypted values. Do not copy
+or print key material.
+
+```sh
+bun install --frozen-lockfile
+bunx dotenvx run --strict --overload -f .env.development -- \
+  docker compose --env-file /dev/null up --build -d
+```
+
+The public hosts are:
 
 - Central Identity: `https://auth.127.0.0.1.nip.io`
 - Book Bidding: `https://bidding.127.0.0.1.sslip.io`
@@ -21,17 +29,51 @@ material. The public hosts are:
 
 Provision both confidential clients using the provider's documented
 [Book Bidding](../README.md#book-bidding-oidc-demo) and
-[Read in Peace](../README.md#read-in-peace-oidc-demo) commands. Use their exact
-callbacks and local app URLs. The provisioning commands issue local client
-credentials; keep each secret in that app's ignored local environment (or
-encrypted `.env.development` using its local dotenvx key), and only the client
-ID in the provider's encrypted `.env.development`. Do not commit, print, or
-share the secrets. Restart the provider after updating its trusted client IDs.
+[Read in Peace](../README.md#read-in-peace-oidc-demo) commands. Use the exact
+callbacks and local app URLs. Capture each one-time secret privately into its
+app's encrypted `.env.development` with the app's existing dotenvx key; only
+the client ID belongs in the provider's encrypted `.env.development`. Keep
+each ignored `.env.keys` private and backed up out of Git. Do not commit, print,
+or share secrets. Restart the provider after updating its trusted client IDs.
 
-Start both applications with their local development configuration, local
-HTTPS host routing, and the provider's Caddy CA available to their runtimes.
-Initialize only an empty/disposable application database if schema setup is
-needed; never replace an existing local database to make the proof pass.
+Start Book Bidding from its repository root; its `dev` script uses the
+encrypted development configuration:
+
+```sh
+bun install --frozen-lockfile
+NODE_EXTRA_CA_CERTS=../book-auth-middleware/central-identity-root.crt \
+  bun run dev -- --host 0.0.0.0
+```
+
+Install dependencies for Read in Peace once from its repository root:
+
+```sh
+cd ../read-in-peace
+npm install
+(cd frontend && npm ci)
+(cd backend && npm ci)
+```
+
+In one terminal, start PostgreSQL, apply migrations, and start the backend:
+
+```sh
+cd ../read-in-peace
+docker compose up -d
+cd backend
+npm run db:migrate
+NODE_EXTRA_CA_CERTS=../../book-auth-middleware/central-identity-root.crt \
+  npm run start:dev
+```
+
+In another terminal, start Nuxt:
+
+```sh
+cd ../read-in-peace/frontend
+npm run dev -- --host 0.0.0.0
+```
+
+Each application must already have its local database schema; only initialize
+an empty/disposable database if setup is required.
 
 ## 2. Invite and enroll a disposable Central Identity
 
@@ -48,8 +90,6 @@ Open the invitation from Mailpit, create the identity at the invitation's
 `/sign-up?invitation=...` link, and verify its email from the subsequent Mailpit
 message. Use an ephemeral password for this disposable identity. Email
 verification is required before Central Identity password sign-in.
-
-## 3. Run the public HTTPS browser journey
 
 Install Chromium once in the Book Bidding repository (`bunx playwright install
 chromium`), then run from that repository. Use the just-invited address and
