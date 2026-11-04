@@ -29,16 +29,13 @@ export READING_OIDC_CLIENT_SECRET=synthetic-reading-client-secret
 export READING_OIDC_REDIRECT_URI=https://reading.localhost/api/auth/callback/central-identity
 
 compose=(docker compose --project-name "$project" --env-file /dev/null -f "$root/compose.production.yaml")
-cleanup() {
-  "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  docker volume rm "$reading_volume" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
+for required in AUTH_DOMAIN BETTER_AUTH_SECRET DATABASE_URL SMTP_HOST READING_DOMAIN READING_DB_VOLUME READING_DATABASE_URL READING_AUTH_SECRET READING_OIDC_CLIENT_SECRET; do
+  if env "${required}=" "${compose[@]}" config --quiet >/dev/null 2>&1; then
+    echo "Compose accepted missing ${required}" >&2
+    exit 1
+  fi
+done
 
-if AUTH_DOMAIN= "${compose[@]}" config --quiet >/dev/null 2>&1; then
-  echo 'Compose accepted missing AUTH_DOMAIN' >&2
-  exit 1
-fi
 
 docker volume create "$reading_volume" >/dev/null
 "${compose[@]}" up --detach --build --wait
