@@ -28,6 +28,10 @@ _Avoid_: SSO session
 An independently operated application that accepts Central Identity authentication while retaining its own Application Users, Application Sessions, and access rules.
 _Avoid_: Demo application, shared application
 
+**Enrollment Invitation**:
+A single-use, email-bound authorization for one person to enroll a Central Identity; it expires after seven days.
+_Avoid_: Registration token
+
 **Authentication Portal**:
 The Central Identity user interface for signing in, enrolling, recovering credentials, and ending the Central SSO Session.
 _Avoid_: Application dashboard, launcher

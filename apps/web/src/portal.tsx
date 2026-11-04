@@ -135,6 +135,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   </main>;
 }
 export function Enrollment() {
+  const invitation = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("invitation") ?? "";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -145,16 +146,20 @@ export function Enrollment() {
     setError("");
     const fields = new FormData(event.currentTarget);
     try {
-      const { error } = await authClient.signUp.email({
-        email: String(fields.get("email")),
-        password: String(fields.get("password")),
-        name: String(fields.get("name")),
-        callbackURL: `${window.location.origin}/sign-in?verified=1`,
+      const response = await fetch("/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-enrollment-invitation": invitation },
+        body: JSON.stringify({
+          email: String(fields.get("email")),
+          password: String(fields.get("password")),
+          name: String(fields.get("name")),
+          callbackURL: `${window.location.origin}/sign-in?verified=1`,
+        }),
       });
-      if (error) {
-        setError("This identity could not be created. Check the details or try again later.");
-      } else {
+      if (response.ok) {
         setSubmitted(true);
+      } else {
+        setError("This identity could not be created. Check the invitation and details, then try again.");
       }
     } catch {
       setError("Enrollment could not reach Central Identity. Check your connection and try again.");
