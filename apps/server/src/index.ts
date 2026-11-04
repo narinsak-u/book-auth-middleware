@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
 import { databaseReady, db, user } from "@central-identity/db";
-import { legacyPage } from "./legacy-page";
 
 
 
@@ -40,7 +39,6 @@ const app = new Elysia()
       status: response.status,
     }));
   })
-  .get("/legacy", () => new Response(legacyPage, { headers: { "content-type": "text/html; charset=utf-8" } }))
   .get("/health/live", () => ({ status: "live" }))
   .get("/health/ready", async ({ set }) => {
     try {

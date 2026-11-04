@@ -127,7 +127,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button" type="submit" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
         </form>
-        <div className="legacy-links"><p>Need to create an identity or reset your password?</p><p><a href="/sign-up">Create a Central Identity</a></p><a href="/legacy#register">Enrollment and recovery (temporary)</a></div>
+        <div className="account-links"><p>Need to create an identity or reset your password?</p><p><a href="/sign-up">Create a Central Identity</a></p></div>
         <p className="recovery-back"><a href="/forgot-password">Forgot your password?</a></p>
         {mode === "sign-in" && <p className="direct-note">Signing in directly keeps you here. A Relying Party will be resumed only when Better Auth provides a valid authorization request.</p>}
       </section>
@@ -188,7 +188,7 @@ export function Enrollment() {
             <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
           </form>
         </>}
-        <div className="legacy-links"><a href="/sign-in">Return to sign in</a></div>
+        <div className="account-links"><a href="/sign-in">Return to sign in</a></div>
       </section>
     </div>
   </main>;

@@ -28,7 +28,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .secure-label span { color: #178b6d; font-size: .7rem; }
 .signin-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 630px; align-items: center; gap: clamp(32px, 7vw, 88px); padding: 62px 0 78px; }
 .welcome-panel { position: relative; min-height: 455px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; overflow: hidden; padding: clamp(30px, 5vw, 58px); background: var(--deep); color: white; }
-.welcome-panel::after { position: absolute; right: -138px; bottom: -185px; width: 390px; height: 390px; border: 1px solid #37668c; border-radius: 50%; content: ''; box-shadow: 0 0 0 25px #173c60, 0 0 0 26px #37668c, 0 0 0 52px #173c60, 0 0 0 53px #37668c; opacity: .65; }
+.welcome-panel::after { position: absolute; z-index: 0; right: -138px; bottom: -185px; width: 390px; height: 390px; border: 1px solid #37668c; border-radius: 50%; content: ''; box-shadow: 0 0 0 25px #173c60, 0 0 0 26px #37668c, 0 0 0 52px #173c60, 0 0 0 53px #37668c; opacity: .65; }
+.welcome-panel > * { position: relative; z-index: 1; }
 .welcome-kicker, .form-kicker { margin: 0 0 24px; font-size: .84rem; font-weight: 600; letter-spacing: .04em; }
 .welcome-kicker { color: var(--mint); }
 .welcome-panel h1, .session-panel h1 { max-width: 520px; margin: 0; font-size: clamp(2.15rem, 4vw, 3.3rem); font-weight: 500; letter-spacing: -.045em; line-height: 1.08; }
@@ -51,8 +52,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .button-secondary:hover { background: #eaf3f9; color: var(--blue); }
 .form-error { margin: 10px 0; padding: 11px 13px; border-left: 3px solid #a83e3e; background: #fff1ef; color: #782f2f; line-height: 1.5; }
 .form-status { min-height: 1.2em; color: #426078; line-height: 1.5; }
-.legacy-links { margin-top: 23px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; line-height: 1.5; }
-.legacy-links p { margin: 0 0 6px; }
+.account-links { margin-top: 23px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.account-links p { margin: 0 0 6px; }
 .direct-note { margin-top: 24px; color: #5b7184; font-size: .83rem; line-height: 1.55; }
 .welcome-panel .button { position: relative; z-index: 1; margin-top: 30px; border-color: var(--mint); background: var(--mint); color: #143e43; }
 .welcome-panel .button:hover { background: #d3f1e7; }

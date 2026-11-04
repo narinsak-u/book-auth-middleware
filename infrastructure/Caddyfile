@@ -4,7 +4,7 @@
 
 auth.127.0.0.1.nip.io {
   tls internal
-  @identity path /api/auth/* /.well-known/* /oauth2/* /health/* /legacy*
+  @identity path /api/auth/* /.well-known/* /oauth2/* /health/*
   handle @identity {
     reverse_proxy auth:3000
   }
