@@ -48,7 +48,9 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }, []);
 
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
-  const hasAuthorizationRequest = params?.has("oauth_query") ?? false;
+  const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
+  const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
+  const hasAuthorizationRequest = oauthQuery !== null;
   const verificationError = params?.get("error") === "EMAIL_NOT_VERIFIED" || params?.get("error_description")?.toLowerCase().includes("email not verified");
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
         email: String(fields.get("email")),
         password: String(fields.get("password")),
         callbackURL: window.location.origin,
+        ...(oauthQuery !== null ? { oauth_query: oauthQuery } : {}),
       });
       if (error) {
         setError(error.status === 403 || error.code === "EMAIL_NOT_VERIFIED"
@@ -81,12 +84,16 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
         return;
       }
       if (hasAuthorizationRequest) {
-        if (!data.url) {
-          setError("Sign-in succeeded, but this application request could not be completed. Return to the application and try again.");
-          setPending(false);
+        if (data.url) {
+          window.location.assign(data.url);
           return;
         }
-        window.location.assign(data.url);
+        if (isSignedAuthorizeRequest) {
+          window.location.assign("/api/auth/oauth2/authorize" + window.location.search);
+          return;
+        }
+        setError("Sign-in succeeded, but this application request could not be completed. Return to the application and try again.");
+        setPending(false);
         return;
       }
       window.location.assign("/");
