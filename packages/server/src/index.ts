@@ -1,8 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
-import { databaseReady, db } from "./db";
-import { user } from "./schema";
+import { databaseReady, db, user } from "@central-identity/db";
 
 
 const page = `<!doctype html>

@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
-import { closeDatabase, db } from "./db";
-import { session, user } from "./schema";
+import { closeDatabase, db, session, user } from "@central-identity/db";
 
 const email = process.env.CENTRAL_IDENTITY_EMAIL;
 if (!email) throw new Error("Set CENTRAL_IDENTITY_EMAIL to the exact identity email");
