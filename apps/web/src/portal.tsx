@@ -55,6 +55,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
 
   useEffect(() => {
     if (verificationError) setError("Verify your email using the message sent to your inbox before signing in.");
+    else if (params?.has("error")) setError("This verification link is invalid or expired.");
     else if (params?.has("verified")) setNotice("Email verified. You can now sign in.");
   }, [verificationError]);
   useEffect(() => {
