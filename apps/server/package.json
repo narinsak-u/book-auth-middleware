@@ -7,9 +7,8 @@
     "test": "bun test src/auth.test.ts",
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "provision:bidding": "bun src/provision-bidding.ts",
-    "provision:reading": "bun src/provision-reading.ts",
-    "disable:central-identity": "bun src/disable-central-identity.ts"
+    "disable:central-identity": "bun src/disable-central-identity.ts",
+    "issue:enrollment-invitation": "bun src/issue-enrollment-invitation.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.15",

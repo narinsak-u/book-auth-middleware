@@ -51,7 +51,6 @@ export const auth = betterAuth({
   session: { expiresIn: 7 * 24 * 60 * 60 },
   emailAndPassword: {
     enabled: true,
-    disableSignUp: production && process.env.ALLOW_SIGN_UP !== "true",
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,

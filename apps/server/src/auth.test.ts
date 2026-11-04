@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
+import { db } from "@central-identity/db";
+import { enrollmentInvitation } from "@central-identity/db/schema";
 
 const provider = process.env.TEST_PROVIDER_URL ?? "https://auth.127.0.0.1.nip.io";
 const inbox = process.env.TEST_MAILPIT_URL ?? "http://localhost:8025";
@@ -30,6 +33,28 @@ async function verificationUrl(address: string) {
   return mailUrl(address, "Verify your Central Identity email");
 }
 
+async function issueInvitation(address: string) {
+  const child = Bun.spawn(["bun", "src/issue-enrollment-invitation.ts", address], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  if (await child.exited !== 0) throw new Error(await new Response(child.stderr).text());
+  const link = new URL(await mailUrl(address, "Your Central Identity invitation"));
+  const token = link.searchParams.get("invitation");
+  if (!token) throw new Error("Invitation email did not contain its token");
+  return token;
+}
+
+function signUp(address: string, token: string, name = "Invited Test User", accountPassword = password) {
+  return fetch(`${provider}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-enrollment-invitation": token },
+    body: JSON.stringify({ name, email: address, password: accountPassword }),
+  });
+}
+
 async function signInExisting(address: string) {
   const response = await fetch(`${provider}/api/auth/sign-in/email`, {
     method: "POST",
@@ -41,11 +66,8 @@ async function signInExisting(address: string) {
 }
 
 async function signIn(address: string) {
-  const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "OIDC Protocol User", email: address, password }),
-  });
+  const token = await issueInvitation(address);
+  const signup = await signUp(address, token, "OIDC Protocol User");
   expect(signup.ok).toBe(true);
   const verified = await fetch(await verificationUrl(address), { redirect: "manual" });
   expect([302, 303]).toContain(verified.status);
@@ -67,6 +89,57 @@ async function disableIdentity(address: string) {
 }
 
 describe("central identity public HTTP behavior", () => {
+  test("refuses direct sign-up without an Enrollment Invitation", async () => {
+    const response = await fetch(`${provider}/api/auth/sign-up/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Uninvited", email: `uninvited-${crypto.randomUUID()}@example.test`, password }),
+    });
+    expect(response.status).toBe(403);
+  });
+  test("enrolls only the invited email, verifies it, then permits ordinary sign-in", async () => {
+    const address = `invited-${crypto.randomUUID()}@example.test`;
+    const token = await issueInvitation(address);
+    const enrolled = await signUp(address, token);
+    expect(enrolled.ok).toBe(true);
+    expect([302, 303]).toContain((await fetch(await verificationUrl(address), { redirect: "manual" })).status);
+    expect((await fetch(`${provider}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: address, password }),
+    })).ok).toBe(true);
+  }, 60_000);
+
+  test("a wrong-address attempt does not consume the invitation", async () => {
+    const address = `bound-${crypto.randomUUID()}@example.test`;
+    const token = await issueInvitation(address);
+    expect((await signUp(`other-${crypto.randomUUID()}@example.test`, token)).ok).toBe(false);
+    expect((await signUp(address, token, "Invited", "x")).ok).toBe(false);
+    expect((await signUp(address.toUpperCase(), token)).ok).toBe(true);
+  }, 60_000);
+
+  test("refuses expired invitations", async () => {
+    const address = `expired-${crypto.randomUUID()}@example.test`;
+    const token = await issueInvitation(address);
+    await db.update(enrollmentInvitation).set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(enrollmentInvitation.email, address));
+    expect((await signUp(address, token)).ok).toBe(false);
+  }, 60_000);
+
+  test("cannot redeem an invitation twice", async () => {
+    const address = `replay-${crypto.randomUUID()}@example.test`;
+    const token = await issueInvitation(address);
+    expect((await signUp(address, token)).ok).toBe(true);
+    expect((await signUp(address, token)).ok).toBe(false);
+  }, 60_000);
+
+  test("concurrent redemption creates at most one identity", async () => {
+    const address = `race-${crypto.randomUUID()}@example.test`;
+    const token = await issueInvitation(address);
+    const outcomes = await Promise.all([signUp(address, token), signUp(address, token)]);
+    expect(outcomes.filter((response) => response.ok)).toHaveLength(1);
+  }, 60_000);
+
   test("publishes canonical OIDC discovery and public signing keys", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
@@ -287,11 +360,8 @@ describe("central identity public HTTP behavior", () => {
   test("password recovery uses portal reset route and one-time Mailpit link", async () => {
     const recoveryEmail = `recovery-${crypto.randomUUID()}@example.test`;
     const initialPassword = "initial-central-password-123";
-    const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Recovery Test User", email: recoveryEmail, password: initialPassword }),
-    });
+    const initialToken = await issueInvitation(recoveryEmail);
+    const signup = await signUp(recoveryEmail, initialToken, "Recovery Test User", initialPassword);
     expect(signup.ok).toBe(true);
     expect([302, 303]).toContain((await fetch(await verificationUrl(recoveryEmail), { redirect: "manual" })).status);
     const initialSignIn = await fetch(`${provider}/api/auth/sign-in/email`, {
@@ -346,11 +416,8 @@ describe("central identity public HTTP behavior", () => {
 
 
   test("signs in only after verification, survives a provider restart, and invalidates on sign-out", async () => {
-    const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Local Test User", email, password }),
-    });
+    const invitation = await issueInvitation(email);
+    const signup = await signUp(email, invitation, "Local Test User");
     expect(signup.ok).toBe(true);
 
     const denied = await fetch(`${provider}/api/auth/sign-in/email`, {

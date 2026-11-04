@@ -51,13 +51,13 @@ to stop services without removing data; never use `down -v` unless intentionally
 deleting the local database and Caddy CA. Mailpit is at
 <http://localhost:8025>; it is local-only.
 
-Enrollment and password recovery are local proof flows only. Open
-<https://auth.127.0.0.1.nip.io/sign-up> to register a controlled test identity,
-then open its email verification link in Mailpit before password sign-in.
-`/forgot-password` returns the same confirmation whether or not an address is
-registered; open its Mailpit reset link at `/reset-password` and choose a new
-password. Reset links are one-time and expire after one hour. Do not expose
-enrollment or these Mailpit-backed flows outside local development.
+Enrollment is invitation-only. An operator issues a local invitation with
+`bunx dotenvx run --strict --overload -f .env.development -- bun run --filter @central-identity/server issue:enrollment-invitation -- person@example.test`;
+open the invitation from Mailpit and create the identity, then verify email
+before signing in. `/forgot-password` returns the same confirmation whether or
+not an address is registered; open its Mailpit reset link at `/reset-password`
+and choose a new password. Reset links are one-time and expire after one hour.
+Do not expose enrollment or these Mailpit-backed flows outside local development.
 
 Successful sign-in establishes a database-backed Central SSO Session in a
 secure, host-only cookie. **Sign out of Central Identity** on the portal ends
@@ -245,8 +245,11 @@ The `--strict` flag prevents startup when decryption fails; Compose also
 rejects missing required settings. Images exclude env files and private keys;
 the production stack uses its own persistent PostgreSQL and Caddy volumes,
 real SMTP instead of Mailpit, and public TLS instead of Caddy's local CA.
-Production enrollment is disabled by default; set `ALLOW_SIGN_UP=true`
-only if intentional public enrollment is appropriate.
+Production enrollment is invitation-only in every environment. An operator can
+issue an invitation with
+`bun run --filter @central-identity/server issue:enrollment-invitation -- person@example.com`;
+delivery uses configured SMTP (Mailpit in local development). No open-sign-up
+switch exists.
 
 For production Relying Parties, first set `BIDDING_OIDC_REDIRECT_URI` or
 `READING_OIDC_REDIRECT_URI` to the application's exact HTTPS callback URL.
