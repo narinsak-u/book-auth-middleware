@@ -17,6 +17,7 @@
     "disable:central-identity": "bun run --filter @central-identity/server disable:central-identity"
   },
   "devDependencies": {
+    "bun-types": "1.4.4",
     "turbo": "2.5.4",
     "typescript": "5.9.3"
   }
