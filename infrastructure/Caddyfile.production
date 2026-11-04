@@ -1,0 +1,9 @@
+{$AUTH_DOMAIN} {
+  @identity path /api/auth/* /.well-known/* /oauth2/* /health/*
+  handle @identity {
+    reverse_proxy auth:3000
+  }
+  handle {
+    reverse_proxy web:3001
+  }
+}

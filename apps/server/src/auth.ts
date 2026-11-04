@@ -5,38 +5,62 @@ import { jwt } from "better-auth/plugins";
 import nodemailer from "nodemailer";
 import { db } from "@central-identity/db";
 import * as schema from "@central-identity/db/schema";
-const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
+const required = (name: string): string => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+};
+const production = process.env.NODE_ENV === "production";
+const baseURL = production
+  ? required("BETTER_AUTH_URL")
+  : process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
+const authSecret = production
+  ? required("BETTER_AUTH_SECRET")
+  : process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars";
+if (production) {
+  if (baseURL !== `https://${required("AUTH_DOMAIN")}`) {
+    throw new Error("BETTER_AUTH_URL must match https://AUTH_DOMAIN");
+  }
+  required("DATABASE_URL");
+}
 const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
 const readingClientId = process.env.READING_OIDC_CLIENT_ID;
+const smtpHost = production ? required("SMTP_HOST") : process.env.SMTP_HOST ?? "localhost";
+const smtpPort = Number(production ? required("SMTP_PORT") : process.env.SMTP_PORT ?? 1025);
+const smtpFrom = production ? required("SMTP_FROM") : process.env.SMTP_FROM ?? "Central Identity <identity@localhost>";
+if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+  throw new Error("SMTP_PORT must be a valid TCP port");
+}
 const mailer = nodemailer.createTransport({
-  host: process.env.SMTP_HOST ?? "localhost",
-  port: Number(process.env.SMTP_PORT ?? 1025),
-  secure: false,
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
+  ...(production ? { requireTLS: smtpPort !== 465, auth: {
+    user: required("SMTP_USER"),
+    pass: required("SMTP_PASSWORD"),
+  } } : {}),
 });
 
 export const auth = betterAuth({
   appName: "Central Identity",
   baseURL,
-  secret: process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars",
+  secret: authSecret,
   trustedOrigins: [baseURL],
   database: drizzleAdapter(db, { provider: "pg", schema }),
   advanced: { useSecureCookies: true },
   session: { expiresIn: 7 * 24 * 60 * 60 },
   emailAndPassword: {
     enabled: true,
+    disableSignUp: production && process.env.ALLOW_SIGN_UP !== "true",
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
     sendResetPassword: async ({ user, url }) => {
-      mailer.sendMail({
-        from: process.env.SMTP_FROM ?? "Central Identity <identity@localhost>",
+      await mailer.sendMail({
+        from: smtpFrom,
         to: user.email,
         subject: "Reset your Central Identity password",
         text: `Reset your password using this one-time link: ${url}`,
-      }, (error) => {
-        if (error) {
-          console.error(JSON.stringify({ event: "email.delivery.failure", action: "password_reset" }));
-        }
       });
     },
   },
@@ -44,7 +68,7 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
       await mailer.sendMail({
-        from: process.env.SMTP_FROM ?? "Central Identity <identity@localhost>",
+        from: smtpFrom,
         to: user.email,
         subject: "Verify your Central Identity email",
         text: `Verify your email address: ${url}`,

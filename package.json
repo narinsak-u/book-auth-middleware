@@ -8,6 +8,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:env": "bun test tests/pre-commit.test.ts",
     "dev": "bun run --filter @central-identity/server dev",
     "start": "bun run --filter @central-identity/server start",
     "web:dev": "bun run --filter @central-identity/web dev",
@@ -16,10 +17,13 @@
     "db:migrate": "bun run --filter @central-identity/db db:migrate",
     "provision:bidding": "bun run --filter @central-identity/server provision:bidding",
     "provision:reading": "bun run --filter @central-identity/server provision:reading",
-    "disable:central-identity": "bun run --filter @central-identity/server disable:central-identity"
+    "disable:central-identity": "bun run --filter @central-identity/server disable:central-identity",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "2.38.2",
     "bun-types": "1.4.4",
+    "husky": "9.1.7",
     "turbo": "2.5.4",
     "typescript": "5.9.3"
   }

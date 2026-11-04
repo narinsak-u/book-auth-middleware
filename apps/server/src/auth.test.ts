@@ -53,7 +53,7 @@ async function signIn(address: string) {
 }
 async function disableIdentity(address: string) {
   const child = Bun.spawn([
-    "docker", "compose", "--env-file", ".env", "run", "--rm", "--no-deps",
+    "docker", "compose", "--env-file", "/dev/null", "run", "--rm", "--no-deps",
     "-e", `CENTRAL_IDENTITY_EMAIL=${address}`,
     "auth", "bun", "run", "disable:central-identity",
   ], {
