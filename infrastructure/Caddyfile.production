@@ -7,3 +7,13 @@
     reverse_proxy web:3001
   }
 }
+
+{$READING_DOMAIN} {
+  @readingBackend path /api/* /socket.io/*
+  handle @readingBackend {
+    reverse_proxy reading-backend:4000
+  }
+  handle {
+    reverse_proxy reading-frontend:3000
+  }
+}
