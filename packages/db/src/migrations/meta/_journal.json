@@ -22,6 +22,13 @@
       "when": 1793731731089,
       "tag": "0002_disable_central_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793731731090,
+      "tag": "0003_enrollment_invitation",
+      "breakpoints": true
     }
   ]
 }
