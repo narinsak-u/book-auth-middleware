@@ -18,12 +18,14 @@
 # misc
 .DS_Store
 *.pem
+central-identity-root.crt
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+.env
 # local env files
 .env.local
 .env.development.local
