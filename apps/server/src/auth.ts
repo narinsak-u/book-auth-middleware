@@ -3,8 +3,8 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import nodemailer from "nodemailer";
-import { db } from "./db";
-import * as schema from "./schema";
+import { db } from "@central-identity/db";
+import * as schema from "@central-identity/db/schema";
 const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
 const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
 const readingClientId = process.env.READING_OIDC_CLIENT_ID;
@@ -54,7 +54,7 @@ export const auth = betterAuth({
   plugins: [
     jwt(),
     oauthProvider({
-      loginPage: "/",
+      loginPage: "/sign-in",
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
       cachedTrustedClients: new Set([biddingClientId, readingClientId].filter((id): id is string => Boolean(id))),

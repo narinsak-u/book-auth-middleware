@@ -1,4 +1,4 @@
-import { closeDatabase } from "./db";
+import { closeDatabase } from "@central-identity/db";
 
 export async function provisionOAuthClient(clientName: string, emailPrefix: string, redirectURI: string) {
   // Dynamic import is required so this privilege is set before auth initializes.

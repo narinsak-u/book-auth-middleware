@@ -4,7 +4,13 @@
 
 auth.127.0.0.1.nip.io {
   tls internal
-  reverse_proxy auth:3000
+  @identity path /api/auth/* /.well-known/* /oauth2/* /health/*
+  handle @identity {
+    reverse_proxy auth:3000
+  }
+  handle {
+    reverse_proxy web:3001
+  }
 }
 
 bidding.127.0.0.1.sslip.io {

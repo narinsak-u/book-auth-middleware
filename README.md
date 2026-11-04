@@ -13,10 +13,51 @@ The provider is served over HTTPS at `https://auth.127.0.0.1.nip.io`. That hostn
 ## Start
 
 ```sh
+export COMPOSE_PROJECT_NAME=book-auth-middleware
 docker compose --env-file .env.example up --build
 ```
 
-Compose runs PostgreSQL and Mailpit, applies the committed Drizzle migrations before starting the provider, then starts Caddy on port 443. PostgreSQL data is retained in the `central-db` volume across provider restarts. The test email inbox is at <http://localhost:8025>.
+Compose runs five local services: PostgreSQL, Mailpit, the Elysia/Better Auth
+server (`auth`), the TanStack Start Authentication Portal (`web`), and Caddy.
+The two Bun processes run separately behind Caddy on the unchanged public
+HTTPS hosts: `https://auth.127.0.0.1.nip.io` for Central Identity,
+`https://bidding.127.0.0.1.sslip.io` for Book Bidding, and
+`https://reading.lvh.me` for Read in Peace. Caddy sends portal pages to `web`
+and Better Auth protocol, discovery/JWKS, and health traffic to `auth`.
+PostgreSQL stays private. The root `build`, `typecheck`, and `test` commands run
+through Turborepo. Compose applies the committed migrations before starting
+`auth`; migration failure prevents the server from starting. PostgreSQL data
+remains in the existing `central-db` volume. This workspace cutover adds no
+schema migration and must not recreate that volume.
+
+Before applying any future database migration to populated data, make and
+verify an operator-controlled backup:
+
+```sh
+docker compose exec -T db pg_dump -U central -d central --format=custom > central-before-migration.dump
+pg_restore --list central-before-migration.dump
+```
+
+Keep the ignored `.env`, `BETTER_AUTH_SECRET`, database volume, and existing
+client IDs/secrets stable across restarts. Use `docker compose down` to stop
+services without removing data; never use `docker compose down -v` unless
+intentionally deleting the local database and Caddy CA. The test email inbox is
+at <http://localhost:8025>; it is local-only and is not an email service for
+deployment.
+
+Enrollment and password recovery are local proof flows only. Open
+<https://auth.127.0.0.1.nip.io/sign-up> to register a controlled test identity,
+then open its email verification link in Mailpit before password sign-in.
+`/forgot-password` returns the same confirmation whether or not an address is
+registered; open its Mailpit reset link at `/reset-password` and choose a new
+password. Reset links are one-time and expire after one hour. Do not expose
+enrollment or these Mailpit-backed flows outside local development.
+
+Successful sign-in establishes a database-backed Central SSO Session in a
+secure, host-only cookie. **Sign out of Central Identity** on the portal ends
+only that session. It prevents a fresh OIDC authorization from silently
+reusing it, but it does not revoke Book Bidding or Read in Peace Application
+Sessions; sign out in each application separately when needed.
 
 Export and trust Caddy's local CA once after Caddy has started:
 
@@ -28,12 +69,9 @@ sudo update-ca-certificates
 
 For browsers with a separate certificate store, import `central-identity-root.crt` there as a trusted certificate authority. Restart the browser after importing. Do not share the private CA key or use this CA outside local development.
 
-Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open the verification link in Mailpit, then sign in. The provider requires email verification before password sign-in. A successful sign-in establishes a database-backed Central SSO Session in a secure, host-only cookie.
-
-**Sign out of Central Identity** on the provider page ends only the Central
-SSO Session. It prevents a fresh OIDC authorization from silently reusing that
-session, but it does not revoke already-issued Book Bidding or Read in Peace
-Application Sessions. Sign out in each application separately when needed.
+Open <https://auth.127.0.0.1.nip.io> to reach the TanStack Authentication
+Portal. It provides sign-in, local enrollment, password recovery, and central
+sign-out.
 
 ## Book Bidding OIDC demo
 
@@ -104,21 +142,23 @@ and frontend with the `reading.lvh.me` URLs described in its README. Opening
 Session; signing out of Reading does not sign out Book Bidding or Central
 Identity.
 
-For a persistent public-browser regression across both apps, provision both
-clients, start all three applications, and run the opt-in Book Bidding test
-with a verified Central Identity:
+For the opt-in public HTTPS browser regression across both applications,
+provision both clients, start the provider and both relying parties, and use a
+verified test Central Identity:
 
 ```sh
 cd ../book-bidding
 NODE_EXTRA_CA_CERTS=../book-auth-middleware/central-identity-root.crt VITE_OIDC_TEST_EMAIL='new-address@example.test' VITE_OIDC_TEST_PASSWORD='the verified identity password' bun run test:unit -- --run src/tests/oidc-cross-app.test.ts
 ```
 
-It signs into both apps through the public HTTPS flow, confirms their Application
-Sessions are distinct, and verifies that either app can sign out without
-affecting the other. It then signs out centrally, confirms both existing app
-sessions remain active, and checks that a fresh authorization prompts for the
-Central Identity password. The same Caddy CA trust and Chromium setup described
-above are required.
+The suite covers Book Bidding's protected `/account/identity` destination and
+Read in Peace's `/dashboard` sign-in prompt, verifying return to each
+destination. It confirms the existing Central SSO Session avoids a second
+password form, creates distinct Application Sessions, and that either
+application can sign out without ending the other's session. It then signs
+out centrally, confirms both application sessions remain active, and checks
+that a fresh authorization requires Central Identity reauthentication. The
+same Caddy CA trust and Chromium setup described above are required.
 
 ## Disabling a Central Identity
 
@@ -129,7 +169,6 @@ CENTRAL_IDENTITY_EMAIL='person@example.test' bun run disable:central-identity
 ```
 
 Run this local CLI only with operator access to the provider database. There is no user-facing disable endpoint. Disabling marks the Central Identity disabled and revokes its Central SSO Sessions, which also invalidates outstanding authorization codes. Application Sessions already issued by Book Bidding or another application are untouched and remain usable until their own expiry or independent revocation.
-To recover a forgotten password, use **Forgot your password?** on the sign-in page and submit the account email. The page gives the same confirmation whether or not that address is registered; check Mailpit for the reset link. Open it, choose a new password, and sign in with it. Reset links are one-time and expire after one hour; only the link is emailed, never the password.
 
 ## Verify the public behavior
 
@@ -161,7 +200,10 @@ Wait until PostgreSQL is healthy again before resuming requests.
 
 ## Database changes
 
-Committed SQL migrations are under `src/db/migrations` and are applied on every startup. After changing `src/schema.ts`, generate and commit a migration with:
+The existing SQL migrations and journal are under `packages/db/src/migrations`;
+they are applied by the explicit `bun run db:migrate` step before server
+startup. After changing `packages/db/src/schema.ts`, generate and commit a
+migration with:
 
 ```sh
 bun run db:generate

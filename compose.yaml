@@ -32,6 +32,7 @@ services:
       SMTP_PORT: 1025
       SMTP_FROM: ${SMTP_FROM:-Central Identity <identity@localhost>}
       BIDDING_OIDC_CLIENT_ID: ${BIDDING_OIDC_CLIENT_ID:-}
+      READING_OIDC_CLIENT_ID: ${READING_OIDC_CLIENT_ID:-}
       PORT: 3000
     volumes:
       - .:/app
@@ -47,19 +48,39 @@ services:
       timeout: 3s
       retries: 20
 
+  web:
+    image: oven/bun:1.4.2
+    working_dir: /app
+    command: ["sh", "-c", "bun run web:start"]
+    environment:
+      PORT: 3001
+    volumes:
+      - .:/app
+      - auth-node-modules:/app/node_modules
+    depends_on:
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/sign-in').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   caddy:
     image: caddy:2.10.0-alpine
     ports:
       - "127.0.0.1:443:443"
       - "127.0.0.1:443:443/udp"
     volumes:
-      - ./src/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       auth:
+        condition: service_healthy
+      web:
         condition: service_healthy
 
 volumes:
