@@ -67,6 +67,15 @@ async function disableIdentity(address: string) {
 }
 
 describe("central identity public HTTP behavior", () => {
+  test("refuses direct sign-up without an Enrollment Invitation", async () => {
+    const response = await fetch(`${provider}/api/auth/sign-up/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Uninvited", email: `uninvited-${crypto.randomUUID()}@example.test`, password }),
+    });
+    expect(response.status).toBe(403);
+  });
+
   test("publishes canonical OIDC discovery and public signing keys", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);

@@ -180,8 +180,8 @@ export function Enrollment() {
       <section className="form-panel" aria-labelledby="enrollment-title">
         <p className="form-kicker">New identity</p>
         <h2 id="enrollment-title">Sign up</h2>
-        {submitted ? <p className="form-status" role="status">If enrollment succeeded, a verification message has been sent. Open the link in that email before signing in.</p> : <>
-          <p className="form-intro">Create a local identity. Email verification is required before password sign-in.</p>
+        {submitted ? <p className="form-status" role="status">If enrollment succeeded, a verification message has been sent. Open the link in that email before signing in.</p> : !invitation ? <p className="form-intro">Central Identity enrollment requires an invitation. Ask an operator to invite your email address.</p> : <>
+          <p className="form-intro">Use the email address this invitation was sent to. Email verification is required before password sign-in.</p>
           <form onSubmit={submit} aria-busy={pending}>
             <label htmlFor="signup-name">Name</label>
             <input id="signup-name" name="name" type="text" autoComplete="name" required disabled={pending} />
