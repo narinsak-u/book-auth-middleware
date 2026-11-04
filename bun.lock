@@ -5,6 +5,7 @@
     "": {
       "name": "book-auth-middleware",
       "devDependencies": {
+        "bun-types": "1.4.4",
         "turbo": "2.5.4",
         "typescript": "5.9.3",
       },
