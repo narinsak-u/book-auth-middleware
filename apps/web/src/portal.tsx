@@ -127,6 +127,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
           <button className="button" type="submit" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
         </form>
         <div className="legacy-links"><p>Need to create an identity or reset your password?</p><a href="/legacy#register">Enrollment and recovery (temporary)</a></div>
+        <p className="recovery-back"><a href="/forgot-password">Forgot your password?</a></p>
         {mode === "sign-in" && <p className="direct-note">Signing in directly keeps you here. A Relying Party will be resumed only when Better Auth provides a valid authorization request.</p>}
       </section>
     </div>

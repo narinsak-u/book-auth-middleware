@@ -292,7 +292,7 @@ describe("central identity public HTTP behavior", () => {
     expect(ready.status).toBe(200);
     expect(await ready.json()).toEqual({ status: "ready" });
   });
-  test("password recovery works through the site and Mailpit without revealing or reusing credentials", async () => {
+  test("password recovery uses portal reset route and one-time Mailpit link", async () => {
     const recoveryEmail = `recovery-${crypto.randomUUID()}@example.test`;
     const initialPassword = "initial-central-password-123";
     const signup = await fetch(`${provider}/api/auth/sign-up/email`, {
@@ -302,15 +302,25 @@ describe("central identity public HTTP behavior", () => {
     });
     expect(signup.ok).toBe(true);
     expect([302, 303]).toContain((await fetch(await verificationUrl(recoveryEmail), { redirect: "manual" })).status);
+    const initialSignIn = await fetch(`${provider}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: recoveryEmail, password: initialPassword }),
+    });
+    expect(initialSignIn.ok).toBe(true);
+    const sessionCookie = initialSignIn.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");
 
-    const legacyPage = await (await fetch(`${provider}/legacy`)).text();
-    expect(legacyPage).toContain("Create a Central Identity");
-    expect(legacyPage).toContain("Reset a password");
+    const requestPage = await (await fetch(`${provider}/forgot-password`)).text();
+    expect(requestPage).toContain("Send reset link");
+    expect(requestPage).toContain('type="email"');
+    const resetForm = await (await fetch(`${provider}/reset-password`)).text();
+    expect(resetForm).toContain("Choose a new password");
+    expect(resetForm).toContain('autocomplete="new-password"');
 
     const requestReset = (address: string) => fetch(`${provider}/api/auth/request-password-reset`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: address, redirectTo: `${provider}/legacy` }),
+      body: JSON.stringify({ email: address, redirectTo: `${provider}/reset-password` }),
     });
     const unknown = await requestReset(`missing-${crypto.randomUUID()}@example.test`);
     const requested = await requestReset(recoveryEmail);
@@ -322,6 +332,8 @@ describe("central identity public HTTP behavior", () => {
     const followed = await fetch(resetUrl, { redirect: "manual" });
     expect([302, 303]).toContain(followed.status);
     const resetPage = new URL(followed.headers.get("location")!);
+    expect(resetPage.pathname).toBe("/reset-password");
+    expect(resetPage.origin).toBe(new URL(provider).origin);
     expect(resetPage.searchParams.has("token")).toBe(true);
     const token = resetPage.searchParams.get("token")!;
     expect(await (await fetch(resetPage)).text()).toContain("Choose a new password");
@@ -332,6 +344,7 @@ describe("central identity public HTTP behavior", () => {
     });
     expect((await reset("new-central-password-456")).ok).toBe(true);
     expect((await reset("reused-link-password-789")).ok).toBe(false);
+    expect((await fetch(`${provider}/api/auth/get-session`, { headers: { cookie: sessionCookie } })).json()).resolves.toBeNull();
 
     const oldPasswordLogin = await fetch(`${provider}/api/auth/sign-in/email`, {
       method: "POST",

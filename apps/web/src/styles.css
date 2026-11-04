@@ -63,6 +63,14 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .session-panel > p { color: var(--muted); line-height: 1.65; }
 .session-panel .signed-in-as { margin: 20px 0 6px; color: var(--ink); }
 .signout-note { margin: 27px 0 12px; padding: 16px 18px; border: 1px solid var(--line); background: #f6f9fb; color: #425a70; font-size: .92rem; line-height: 1.6; }
+.recovery-panel { max-width: 430px; width: 100%; margin: 88px auto; padding: clamp(28px, 5vw, 48px); background: var(--paper); box-shadow: 0 15px 40px #173b5810; }
+.recovery-panel h1 { margin: 0; color: var(--ink); font-size: clamp(1.7rem, 3vw, 2.1rem); font-weight: 600; letter-spacing: -.035em; }
+.recovery-panel form { display: grid; gap: 9px; }
+.recovery-panel label { margin-top: 8px; color: #233d55; font-size: .92rem; font-weight: 600; }
+.recovery-panel input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid #aebfcb; border-radius: 2px; background: var(--paper); color: var(--ink); }
+.recovery-panel input:disabled { background: #f3f6f8; }
+.recovery-back { margin: 24px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.6; }
+@media (max-width: 760px) { .recovery-panel { margin: 48px auto; } }
 @media (max-width: 760px) {
   .portal-shell { width: min(100% - 32px, 540px); }
   .topbar { height: 72px; }
