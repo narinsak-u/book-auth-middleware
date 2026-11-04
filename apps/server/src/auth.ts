@@ -54,7 +54,7 @@ export const auth = betterAuth({
   plugins: [
     jwt(),
     oauthProvider({
-      loginPage: "/",
+      loginPage: "/sign-in",
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
       cachedTrustedClients: new Set([biddingClientId, readingClientId].filter((id): id is string => Boolean(id))),

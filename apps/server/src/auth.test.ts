@@ -67,6 +67,14 @@ async function disableIdentity(address: string) {
 }
 
 describe("central identity public HTTP behavior", () => {
+  test("serves an accessible sign-in form from the portal", async () => {
+    const response = await fetch(`${provider}/sign-in`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("Sign in to Central Identity");
+    expect(html).toContain('type="email"');
+    expect(html.toLowerCase()).toContain('autocomplete="current-password"');
+  });
   test("publishes canonical OIDC discovery and public signing keys", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);
@@ -295,13 +303,14 @@ describe("central identity public HTTP behavior", () => {
     expect(signup.ok).toBe(true);
     expect([302, 303]).toContain((await fetch(await verificationUrl(recoveryEmail), { redirect: "manual" })).status);
 
-    const html = await (await fetch(provider)).text();
-    expect(html).toContain('id="forgot-password"');
+    const legacyPage = await (await fetch(`${provider}/legacy`)).text();
+    expect(legacyPage).toContain("Create a Central Identity");
+    expect(legacyPage).toContain("Reset a password");
 
     const requestReset = (address: string) => fetch(`${provider}/api/auth/request-password-reset`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: address, redirectTo: provider }),
+      body: JSON.stringify({ email: address, redirectTo: `${provider}/legacy` }),
     });
     const unknown = await requestReset(`missing-${crypto.randomUUID()}@example.test`);
     const requested = await requestReset(recoveryEmail);
@@ -315,7 +324,7 @@ describe("central identity public HTTP behavior", () => {
     const resetPage = new URL(followed.headers.get("location")!);
     expect(resetPage.searchParams.has("token")).toBe(true);
     const token = resetPage.searchParams.get("token")!;
-    expect(await (await fetch(resetPage)).text()).toContain('id="reset-password"');
+    expect(await (await fetch(resetPage)).text()).toContain("Choose a new password");
     const reset = (newPassword: string) => fetch(`${provider}/api/auth/reset-password`, {
       method: "POST",
       headers: { "content-type": "application/json" },

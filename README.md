@@ -13,17 +13,19 @@ The provider is served over HTTPS at `https://auth.127.0.0.1.nip.io`. That hostn
 ## Start
 
 ```sh
+export COMPOSE_PROJECT_NAME=book-auth-middleware
 docker compose --env-file .env.example up --build
 ```
 
-The provider now uses Bun workspaces: `packages/server` contains the existing
-Elysia/Better Auth service and `packages/db` contains its existing Drizzle
-schema and migration history. The root `build`, `typecheck`, and `test`
-commands run through Turborepo. Compose runs PostgreSQL and Mailpit, runs the
-committed migrations as a separate command (and will not start the server if
-migration fails), then starts the provider and Caddy. PostgreSQL data remains
-in the existing `central-db` volume; never use `docker compose down -v` during
-this migration.
+The provider now uses Bun workspaces: `apps/server` contains the existing
+Elysia/Better Auth service, `apps/web` contains the TanStack Start portal, and
+`packages/db` contains the existing Drizzle schema and migration history. The
+portal and identity server run as separate Bun processes behind Caddy. The root
+`build`, `typecheck`, and `test` commands run through Turborepo. Compose runs
+PostgreSQL and Mailpit, applies the committed migrations before starting the
+server, then starts the portal and Caddy. Migration failure prevents the server
+from starting. PostgreSQL data remains in the existing `central-db` volume;
+never use `docker compose down -v` during this migration.
 
 Before applying any future database migration to a populated database, create
 and verify an operator-controlled backup, for example:
@@ -46,10 +48,15 @@ sudo update-ca-certificates
 
 For browsers with a separate certificate store, import `central-identity-root.crt` there as a trusted certificate authority. Restart the browser after importing. Do not share the private CA key or use this CA outside local development.
 
-Open <https://auth.127.0.0.1.nip.io>, register a controlled test address, open the verification link in Mailpit, then sign in. The provider requires email verification before password sign-in. A successful sign-in establishes a database-backed Central SSO Session in a secure, host-only cookie.
+Open <https://auth.127.0.0.1.nip.io> to reach the TanStack Authentication Portal.
+Use the temporary enrollment and recovery page linked from sign-in to create a
+controlled test identity, verify its address through Mailpit, or reset its
+password. The provider requires email verification before password sign-in. A
+successful sign-in establishes a database-backed Central SSO Session in a
+secure, host-only cookie.
 
-**Sign out of Central Identity** on the provider page ends only the Central
-SSO Session. It prevents a fresh OIDC authorization from silently reusing that
+**Sign out of Central Identity** on the portal ends only the Central SSO
+Session. It prevents a fresh OIDC authorization from silently reusing that
 session, but it does not revoke already-issued Book Bidding or Read in Peace
 Application Sessions. Sign out in each application separately when needed.
 
@@ -147,7 +154,11 @@ CENTRAL_IDENTITY_EMAIL='person@example.test' bun run disable:central-identity
 ```
 
 Run this local CLI only with operator access to the provider database. There is no user-facing disable endpoint. Disabling marks the Central Identity disabled and revokes its Central SSO Sessions, which also invalidates outstanding authorization codes. Application Sessions already issued by Book Bidding or another application are untouched and remain usable until their own expiry or independent revocation.
-To recover a forgotten password, use **Forgot your password?** on the sign-in page and submit the account email. The page gives the same confirmation whether or not that address is registered; check Mailpit for the reset link. Open it, choose a new password, and sign in with it. Reset links are one-time and expire after one hour; only the link is emailed, never the password.
+Enrollment and recovery temporarily remain on the legacy Elysia page linked
+from sign-in. To reset a forgotten password, request a link there; the page
+gives the same confirmation whether or not the address is registered. Open the
+one-time link on that same legacy page and choose a new password. Reset links
+expire after one hour; only the link is emailed, never the password.
 
 ## Verify the public behavior
 
