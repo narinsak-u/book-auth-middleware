@@ -113,10 +113,12 @@ cd ../book-bidding
 NODE_EXTRA_CA_CERTS=../book-auth-middleware/central-identity-root.crt VITE_OIDC_TEST_EMAIL='new-address@example.test' VITE_OIDC_TEST_PASSWORD='the verified identity password' bun run test:unit -- --run src/tests/oidc-cross-app.test.ts
 ```
 
-It signs in through Book Bidding, creates a separate Read in Peace session
-through the public HTTPS flow, signs out of Reading, and confirms Bidding
-remains signed in. The same Caddy CA trust and Chromium setup described above
-are required.
+It signs into both apps through the public HTTPS flow, confirms their Application
+Sessions are distinct, and verifies that either app can sign out without
+affecting the other. It then signs out centrally, confirms both existing app
+sessions remain active, and checks that a fresh authorization prompts for the
+Central Identity password. The same Caddy CA trust and Chromium setup described
+above are required.
 
 ## Disabling a Central Identity
 

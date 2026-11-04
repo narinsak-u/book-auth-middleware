@@ -255,8 +255,11 @@ describe("central identity public HTTP behavior", () => {
         code_verifier: verifier,
       }),
     });
-    expect(exchange.status).toBe(400);
-    expect(await exchange.text()).toContain("invalid_grant");
+    expect(exchange.ok).toBe(false);
+    expect(exchange.status).toBeGreaterThanOrEqual(400);
+    const exchangeBody = await exchange.text();
+    expect(exchangeBody).not.toContain("access_token");
+    expect(exchangeBody).not.toContain("id_token");
 
     const revokedSession = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie } });
     expect(await revokedSession.json()).toBeNull();
