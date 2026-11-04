@@ -73,11 +73,6 @@ Open <https://auth.127.0.0.1.nip.io> to reach the TanStack Authentication
 Portal. It provides sign-in, local enrollment, password recovery, and central
 sign-out.
 
-**Sign out of Central Identity** on the portal ends only the Central SSO
-Session. It prevents a fresh OIDC authorization from silently reusing that
-session, but it does not revoke already-issued Book Bidding or Read in Peace
-Application Sessions. Sign out in each application separately when needed.
-
 ## Book Bidding OIDC demo
 
 Use the sibling repository at `../book-bidding` with the exact public callback `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
@@ -156,8 +151,8 @@ cd ../book-bidding
 NODE_EXTRA_CA_CERTS=../book-auth-middleware/central-identity-root.crt VITE_OIDC_TEST_EMAIL='new-address@example.test' VITE_OIDC_TEST_PASSWORD='the verified identity password' bun run test:unit -- --run src/tests/oidc-cross-app.test.ts
 ```
 
-The test begins on Book Bidding's protected `/account/identity` page and
-Read in Peace's protected `/dashboard` page, verifying return to each original
+The suite covers Book Bidding's protected `/account/identity` destination and
+Read in Peace's `/dashboard` sign-in prompt, verifying return to each
 destination. It confirms the existing Central SSO Session avoids a second
 password form, creates distinct Application Sessions, and that either
 application can sign out without ending the other's session. It then signs
