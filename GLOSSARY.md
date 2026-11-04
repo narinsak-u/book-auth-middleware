@@ -23,3 +23,11 @@ _Avoid_: Application session
 **Application Session**:
 An application's own session established after it validates a central identity; it does not end merely because the central SSO session ends.
 _Avoid_: SSO session
+
+**Relying Party**:
+An independently operated application that accepts Central Identity authentication while retaining its own Application Users, Application Sessions, and access rules.
+_Avoid_: Demo application, shared application
+
+**Authentication Portal**:
+The Central Identity user interface for signing in, enrolling, recovering credentials, and ending the Central SSO Session.
+_Avoid_: Application dashboard, launcher
