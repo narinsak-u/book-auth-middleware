@@ -138,11 +138,9 @@ With Compose running from the auth repository root and the local CA trusted:
 ```sh
 curl https://auth.127.0.0.1.nip.io/health/live
 curl https://auth.127.0.0.1.nip.io/health/ready
-set -a
 . ../book-bidding/.env
-BIDDING_OIDC_CLIENT_ID="$CENTRAL_OIDC_CLIENT_ID"
-BIDDING_OIDC_CLIENT_SECRET="$CENTRAL_OIDC_CLIENT_SECRET"
-set +a
+export BIDDING_OIDC_CLIENT_ID="$CENTRAL_OIDC_CLIENT_ID"
+export BIDDING_OIDC_CLIENT_SECRET="$CENTRAL_OIDC_CLIENT_SECRET"
 bun run test
 ```
 
