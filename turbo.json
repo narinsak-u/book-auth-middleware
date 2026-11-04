@@ -3,6 +3,6 @@
   "tasks": {
     "build": { "dependsOn": ["^build"] },
     "typecheck": { "dependsOn": ["^typecheck"] },
-    "test": { "dependsOn": ["^test"], "outputs": [] }
+    "test": { "dependsOn": ["^test"], "outputs": [], "cache": false, "passThroughEnv": ["BIDDING_OIDC_CLIENT_ID", "BIDDING_OIDC_CLIENT_SECRET", "NODE_EXTRA_CA_CERTS", "COMPOSE_PROJECT_NAME"] }
   }
 }
