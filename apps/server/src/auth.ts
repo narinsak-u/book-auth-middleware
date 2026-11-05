@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { betterAuth } from "better-auth";
+import { betterAuth, getCurrentAdapter } from "better-auth";
 import { jwt, username } from "better-auth/plugins";
 import nodemailer from "nodemailer";
 import { db } from "@central-identity/db";
@@ -13,6 +14,7 @@ const required = (name: string): string => {
 const production = process.env.NODE_ENV === "production";
 const testProduction = production && process.env.TEST_PRODUCTION === "true";
 const oauthEnabled = !production || testProduction;
+const productionRuntime = production && !testProduction;
 const baseURL = production
   ? required("BETTER_AUTH_URL")
   : process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io:8080";
@@ -70,6 +72,23 @@ export const auth = betterAuth({
         before: async (newUser, endpoint) => {
           const path = endpoint?.request && new URL(endpoint.request.url).pathname;
           if (path === "/api/auth/sign-up/email") {
+            if (productionRuntime) {
+              const token = endpoint?.request?.headers.get("x-enrollment-invitation");
+              if (!token || typeof newUser.email !== "string") return false;
+              const adapter = await getCurrentAdapter(endpoint.context.adapter);
+              const now = new Date();
+              const invitation = await adapter.update({
+                model: "enrollmentInvitation",
+                where: [
+                  { field: "tokenHash", value: createHash("sha256").update(token).digest("hex") },
+                  { field: "email", value: newUser.email.trim().toLowerCase() },
+                  { field: "expiresAt", operator: "gt", value: now },
+                  { field: "consumedAt", value: null },
+                ],
+                update: { consumedAt: now },
+              });
+              if (!invitation) return false;
+            }
             return typeof newUser.username === "string" && newUser.username.length > 0 ? undefined : false;
           }
           if (newUser.email && newUser.emailVerified) return;

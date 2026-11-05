@@ -180,6 +180,7 @@ export function Enrollment() {
   const [submitted, setSubmitted] = useState(false);
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
   const oauthQuery = params?.get("oauth_query") ?? null;
+  const invitation = params?.get("invitation") ?? "";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,7 +193,10 @@ export function Enrollment() {
     try {
       const response = await fetch("/api/auth/sign-up/email", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(invitation ? { "x-enrollment-invitation": invitation } : {}),
+        },
         body: JSON.stringify({
           name: String(fields.get("name")),
           username: String(fields.get("username")),
