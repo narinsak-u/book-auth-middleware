@@ -39,7 +39,7 @@ With both checkouts adjacent, run Compose through dotenvx so it receives decrypt
 ./node_modules/.bin/dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml up -d --wait
 ```
 
-Do not run the seed command in production. Check `docker compose ... ps` and logs for every service; Caddy must be the only service publishing 80/443. Confirm both hostnames route, the Central Identity discovery issuer is `https://identity.<operator-domain>`, and Reading's OIDC callback equals the registered URI above. Back up both databases independently on a recurring schedule and rehearse restore without attaching a restore volume to the live stack.
+Do not run the seed command in production. Check `docker compose ... ps` and logs for every service; Caddy must be the only service publishing 80/443. Confirm both hostnames route, the Central Identity discovery issuer is `https://identity.<operator-domain>/api/auth`, and Reading's OIDC callback equals the registered URI above. Back up both databases independently on a recurring schedule and rehearse restore without attaching a restore volume to the live stack.
 
 ## Synthetic non-production proof
 
