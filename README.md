@@ -39,8 +39,9 @@ The two Bun processes run separately behind Caddy on public HTTPS port `8080`:
 PostgreSQL stays private. The root `build`, `typecheck`, and `test` commands run
 through Turborepo. Compose applies the committed migrations before starting
 `auth`; migration failure prevents the server from starting. PostgreSQL data
-remains in the existing `central-db` volume. This workspace cutover adds no
-schema migration and must not recreate that volume.
+remains in the existing `central-db` volume. The username migration adds nullable
+username fields and a unique index, preserving all existing identities. Never
+recreate that volume.
 
 Before applying any future database migration to populated data, make and
 verify an operator-controlled backup:
@@ -72,17 +73,20 @@ bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys 
 Never use `down -v` unless intentionally deleting that environment's database
 and Caddy CA. Mailpit is at <http://localhost:8025>; it is local-only.
 
-Central Identity enrollment uses Google and GitHub. Set `GOOGLE_CLIENT_ID`,
-`GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET` in the
-encrypted local environment. Register these exact provider callbacks:
+Central Identity supports open registration with a name, unique normalized
+username, email, and password. Email verification is required before credential
+sign-in. Invitations no longer gate registration; existing invitation records
+remain untouched. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET` in the encrypted local
+environment to enable provider sign-in. Register these exact callbacks:
 
 - Google: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/google`
 - GitHub: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/github`
 
 Use a Google email marked verified. For GitHub, grant `user:email`; users with
 private email must allow the app to read a verified email or sign-in is refused.
-Two provider accounts never merge by email. Link another provider from an
-active Central SSO Session. Existing password sessions remain valid until expiry.
+Two provider accounts never merge by email. Link another provider explicitly
+from an active Central SSO Session.
 
 ### Reviewed recovery
 
@@ -126,12 +130,18 @@ sudo update-ca-certificates
 For browsers with a separate certificate store, import `central-identity-root.crt` there as a trusted certificate authority. Restart the browser after importing. Do not share the private CA key or use this CA outside local development.
 
 Open <https://auth.127.0.0.1.nip.io:8080> to reach the Authentication Portal.
-It provides Google/GitHub sign-in, explicit provider linking, and central
-sign-out.
+It provides username/email-password and configured Google/GitHub sign-in,
+open verified registration, explicit provider linking, and central sign-out.
 
 ## Book Bidding OIDC demo
 
-Use the sibling repository at `../book-bidding` with the exact public callback `https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`. The client is confidential (`client_secret_basic`), first-party, authorization-code-only, and PKCE-required. Client provisioning is a local operator command, not an HTTP endpoint:
+Use the sibling repository at `../book-bidding` with sign-in callback
+`https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`
+and recovery callback
+`https://bidding.127.0.0.1.sslip.io:8080/api/identity-recovery/callback`.
+The client is confidential (`client_secret_basic`), first-party,
+authorization-code-only, and PKCE-required. Client provisioning is a local
+operator command, not an HTTP endpoint:
 
 The canonical issuer is `https://auth.127.0.0.1.nip.io:8080/api/auth`; its OpenID Connect discovery document is at `https://auth.127.0.0.1.nip.io:8080/api/auth/.well-known/openid-configuration`.
 
@@ -140,7 +150,7 @@ bunx dotenvx run --strict --overload -f .env.development -- docker compose --env
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null run --rm --no-deps auth bun run provision:bidding
 ```
 
-The command prints a one-time client ID and secret. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. The provider loads its ID into the trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled.
+The command prints a one-time client ID and secret plus both registered callbacks. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. The provider loads its ID into the trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled.
 
 Start the provider and TLS proxy:
 
@@ -156,16 +166,17 @@ bun install --frozen-lockfile
 NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
 ```
 
-Open <https://auth.127.0.0.1.nip.io:8080> and authenticate with a configured Google or GitHub account that has a verified email. On `https://bidding.127.0.0.1.sslip.io:8080/auth/login`, choose **Continue with Central Identity**. The app stores the validated OIDC issuer/subject as a Generic OAuth account and creates its own ordinary Application User and host-only Application Session. Existing same-email application users are not linked implicitly; Google, GitHub, and password login remain available within Book Bidding.
+Authenticate at Central Identity with username/email-password after verifying the email, or use a configured Google/GitHub account with verified email. On `https://bidding.127.0.0.1.sslip.io:8080/auth/login`, choose **Continue with Central Identity**. The app stores the validated OIDC issuer/subject as a Generic OAuth account and creates its own ordinary Application User and host-only Application Session. Existing same-email application users are not linked implicitly; sign-in credentials remain only at Central Identity.
 
-The automated browser proof requires provider OAuth credentials and real browser sign-in; it cannot use retired Central password credentials. Keep the Caddy CA trust setup above. Keep app secrets in each app's encrypted `.env.development`, not ignored plaintext `.env`.
+The browser proof requires verified email for new credential identities and real provider sign-in for Google/GitHub. Keep the Caddy CA trust setup above. Keep app secrets in each app's encrypted `.env.development`, not ignored plaintext `.env`.
 
 ## Read in Peace OIDC demo
 
-Use the sibling repository at `../read-in-peace` with the exact public callback
-`https://reading.lvh.me:8080/api/auth/callback/central-identity`. Provision its
-confidential, first-party client after its encrypted development environment
-and private `.env.keys` already exist:
+Use the sibling repository at `../read-in-peace` with sign-in callback
+`https://reading.lvh.me:8080/api/auth/callback/central-identity` and recovery
+callback `https://reading.lvh.me:8080/api/identity-recovery/callback`.
+Provision its confidential, first-party client after its encrypted development
+environment and private `.env.keys` already exist:
 
 ```sh
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null up -d db mailpit
@@ -218,10 +229,11 @@ curl https://auth.127.0.0.1.nip.io:8080/health/ready
 bunx dotenvx run --strict --overload -f .env.development -- bun run test
 ```
 
-The public HTTP suite checks OIDC discovery, readiness, and rejection of
-retired password, signup, invitation, and reset endpoints. OAuth sign-in
-requires real Google/GitHub app registrations and interactive provider control;
-the suite does not fake provider success.
+The public HTTP suite checks credential registration, duplicate usernames,
+verification when Mailpit is configured, username/email sign-in, generic
+credential failures, OIDC discovery, and readiness. Provider sign-in and OIDC
+callback continuation require the documented real browser checks; tests never
+fake provider success.
 
 Readiness checks PostgreSQL and returns HTTP 503 when the database is unavailable; liveness only reports whether the provider process responds. Completed OIDC authorizations emit a success event containing only event name, action, and status—never credentials, authorization codes, cookies, tokens, or raw URLs.
 To exercise database-dependent readiness failure while keeping the provider process live:
@@ -278,27 +290,20 @@ provider apps and these exact callbacks:
 - Google: `https://auth-test.127.0.0.1.nip.io:8081/api/auth/callback/google`
 - GitHub: `https://auth-test.127.0.0.1.nip.io:8081/api/auth/callback/github`
 
-Do not reuse live credentials for test-production. Live production still uses
-its existing invitation/password flow; its cutover is deferred and
-`compose.production.yaml` remains unchanged. Invitation records stay in the
-legacy table until they are backed up before a later production migration.
-Before a later production migration removes the table, export and verify its
-records while keeping the backup private and outside Git:
+Central supports username/email-password registration with required email
+verification. Invitation records remain in `enrollment_invitation`; registration
+does not read or consume them. The production external-provider and issuer
+cutover remains a separate verified phase; Google and GitHub are not enabled by
+the current production configuration. The database migration only adds nullable
+username columns and a unique index, preserving all current identities.
 
-```sh
-bunx dotenvx run --strict --overload -f .env.production -- \
-  docker compose --env-file /dev/null -f compose.production.yaml exec -T db \
-  pg_dump -U central -d central --table=enrollment_invitation --format=custom \
-  > central-enrollment-invitations.dump
-pg_restore --list central-enrollment-invitations.dump
-```
-Development and test-production reject invitation/password endpoints and
-links.
-
-For production Relying Parties, first set `BIDDING_OIDC_REDIRECT_URI` or
-`READING_OIDC_REDIRECT_URI` to the application's exact HTTPS callback URL.
-Then run `bunx dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml run --rm --no-deps auth bun run provision:bidding`
-or `provision:reading`. Capture each one-time client secret privately in the
+For production Relying Parties, set both the normal and recovery callback
+environment variables to their exact HTTPS URLs. Recovery callbacks must use
+`/api/identity-recovery/callback` on the same origin as the normal
+`/api/auth/callback/central-identity` callback. Run
+`bunx dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml run --rm --no-deps auth bun run provision:bidding`
+or `provision:reading` only after the separate production checks. Each command
+registers both callbacks. Capture each one-time client secret privately in the
 Relying Party's production secret store, add only its client ID to encrypted
 `.env.production`, and restart `auth` to load the trusted-client cache.
 Each Relying Party must use the issuer `https://<AUTH_DOMAIN>/api/auth` and
