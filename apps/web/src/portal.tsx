@@ -66,6 +66,10 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
   const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
   const hasAuthorizationRequest = oauthQuery !== null;
+  const recoveryReturnTo = hasAuthorizationRequest && oauthQuery
+    ? `/sign-in?oauth_query=${encodeURIComponent(oauthQuery)}`
+    : "/sign-in";
+
   const verificationError = params?.get("error") === "EMAIL_NOT_VERIFIED" || params?.get("error_description")?.toLowerCase().includes("email not verified");
 
   useEffect(() => {
@@ -162,7 +166,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="account-links">
           <a href={`/sign-up${oauthQuery ? `?oauth_query=${encodeURIComponent(oauthQuery)}` : ""}`}>Create a Central Identity</a>
-          <p><a href="/forgot-password">Forgot your password?</a></p>
+          <p><a href={`/forgot-password?returnTo=${encodeURIComponent(recoveryReturnTo)}`}>Forgot your password?</a></p>
         </div>
         {mode === "sign-in" && <p className="direct-note">A Relying Party resumes only when Better Auth provides a valid authorization request.</p>}
       </section>

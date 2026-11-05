@@ -181,6 +181,14 @@ use their public HTTPS origins so callback URLs and cookies match.
    Bidding's **Identity Link** or Read in Peace's **Central Identity link**
    action. Without that action, a same-email Central login must not claim the
    existing application user or its data.
+8. From a pending Book Bidding or Read in Peace sign-in, select **Forgot your
+   password?**. Request a reset, then confirm Mailpit receives a link. Open the
+   link, set a new password, and select **Return to sign in**; the signed
+   authorization request must resume after sign-in. Submit the same reset link
+   again and confirm the portal shows only its generic invalid-or-expired
+   message. Also visit `/reset-password?token=invalid` and confirm the form
+   cannot submit without a token.
+
 
 Credential signup and sign-in are available through the public Better Auth
 endpoints without an invitation. Signup sends a verification email; only
@@ -201,10 +209,11 @@ bun run test:env
 NODE_EXTRA_CA_CERTS="$(realpath central-identity-root.crt)" TEST_PROVIDER_URL=https://auth.127.0.0.1.nip.io:8080 TEST_MAILPIT_URL=http://localhost:8025 bun run --filter @central-identity/server test:integration
 ```
 
-The public HTTP suite checks credential registration, duplicate usernames,
-verification when Mailpit is configured, username/email sign-in, generic
-credential failures, OIDC discovery, and readiness. Real provider linking and
-OIDC callback continuation require the browser checks above.
+The public HTTP suite checks password-reset enumeration resistance, link
+delivery, token replay and invalid-token rejection, password change, revoked
+sessions, and local OIDC return preservation. Real provider linking, reset
+browser behavior, and OIDC callback continuation require the browser checks
+above.
 
 From `book-bidding/`, run `bun run check && bun run test`.
 From `read-in-peace/`, run `npm run test:env`,

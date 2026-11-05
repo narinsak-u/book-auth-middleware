@@ -6,7 +6,19 @@ function Shell({ children }: { children: ReactNode }) {
 }
 
 
+function safeReturnTo(): string {
+  if (typeof window === "undefined") return "/sign-in";
+  const value = new URLSearchParams(window.location.search).get("returnTo");
+  if (!value) return "/sign-in";
+  const destination = new URL(value, window.location.origin);
+  return destination.origin === window.location.origin && value.startsWith("/") && !value.startsWith("//")
+    ? `${destination.pathname}${destination.search}${destination.hash}`
+    : "/sign-in";
+}
+
 export function ForgotPassword() {
+  const returnTo = safeReturnTo();
+
   const [pending, setPending] = useState(false);
   const [requested, setRequested] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +29,10 @@ export function ForgotPassword() {
     setPending(true);
     setError("");
     try {
-      const result = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/reset-password` });
+      const result = await authClient.requestPasswordReset({
+        email,
+        redirectTo: `${window.location.origin}/reset-password?returnTo=${encodeURIComponent(returnTo)}`,
+      });
       if (result.error) throw result.error;
       setRequested(true);
     } catch {
@@ -32,6 +47,7 @@ export function ForgotPassword() {
 
 export function ResetPassword() {
   const token = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("token") ?? "";
+  const returnTo = safeReturnTo();
   const [pending, setPending] = useState(false);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState("");
@@ -52,5 +68,5 @@ export function ResetPassword() {
     }
   }
 
-  return <Shell><p className="form-kicker">Password recovery</p><h1>Choose a new password</h1>{complete ? <><p role="status">Your password has been changed. Sign in with your new password.</p><a className="button" href="/sign-in">Return to sign in</a></> : <><p>Choose a new password for your Central Identity.</p><form onSubmit={submit} aria-busy={pending}><label htmlFor="new-password">New password</label><input id="new-password" name="newPassword" type="password" autoComplete="new-password" minLength={8} required disabled={pending || !token} />{error && <p className="form-error" role="alert">{error}</p>}<button className="button" type="submit" disabled={pending || !token}>{pending ? "Saving…" : "Set new password"}</button></form></>}</Shell>;
+  return <Shell><p className="form-kicker">Password recovery</p><h1>Choose a new password</h1>{complete ? <><p role="status">Your password has been changed. Sign in with your new password.</p><a className="button" href={returnTo}>Return to sign in</a></> : <><p>Choose a new password for your Central Identity.</p><form onSubmit={submit} aria-busy={pending}><label htmlFor="new-password">New password</label><input id="new-password" name="newPassword" type="password" autoComplete="new-password" minLength={8} required disabled={pending || !token} />{error && <p className="form-error" role="alert">{error}</p>}<button className="button" type="submit" disabled={pending || !token}>{pending ? "Saving…" : "Set new password"}</button></form></>}</Shell>;
 }

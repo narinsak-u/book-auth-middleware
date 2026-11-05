@@ -5,6 +5,70 @@ const mailpit = process.env.TEST_MAILPIT_URL;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
+  test.skipIf(!mailpit)("requests password resets without disclosing account existence and rejects replay", async () => {
+    const username = `recovery_${crypto.randomUUID().slice(0, 8)}`;
+    const email = `${crypto.randomUUID()}@example.test`;
+    const password = "verified-password-123";
+    const signup = await authPost("sign-up/email", {
+      name: "Recovery User",
+      username,
+      email,
+      password,
+    });
+    expect(signup.status).toBe(200);
+    const inbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+    const verificationMessage = (await inbox.json()).messages[0];
+    const verification = await fetch(`${mailpit}/api/v1/message/${verificationMessage.ID}`);
+    const verificationURL = (await verification.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    expect(typeof verificationURL).toBe("string");
+    await fetch(verificationURL!, { redirect: "manual" });
+
+    const returnTo = "/sign-in?oauth_query=client_id%3Dtrusted%26sig%3Dsigned";
+    const redirectTo = `${provider}/reset-password?returnTo=${encodeURIComponent(returnTo)}`;
+    const requestReset = (address: string) => authPost("request-password-reset", {
+      email: address,
+      redirectTo,
+    });
+    const existingRequest = await requestReset(email);
+    const missingRequest = await requestReset(`${crypto.randomUUID()}@example.test`);
+    expect(existingRequest.status).toBe(missingRequest.status);
+    expect(await existingRequest.text()).toBe(await missingRequest.text());
+
+    const priorSession = await authPost("sign-in/email", { email, password });
+    expect(priorSession.status).toBe(200);
+    const sessionCookie = priorSession.headers.get("set-cookie")?.split(";")[0];
+    expect(sessionCookie).toContain("session_token=");
+
+    const resetInbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+    const resetMessage = (await resetInbox.json()).messages[0];
+    const resetMail = await fetch(`${mailpit}/api/v1/message/${resetMessage.ID}`);
+    const resetURL = (await resetMail.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    expect(typeof resetURL).toBe("string");
+    const redirect = await fetch(resetURL!, { redirect: "manual" });
+    const resetPage = new URL(redirect.headers.get("location")!);
+    const token = resetPage.searchParams.get("token");
+    expect(resetPage.searchParams.get("returnTo")).toBe(returnTo);
+    expect(resetPage.origin).toBe(provider);
+
+    const reset = (newPassword: string) => authPost("reset-password", { token, newPassword });
+    expect((await reset("new-verified-password-456")).status).toBe(200);
+    expect((await reset("replayed-password-789")).status).toBeGreaterThanOrEqual(400);
+    const revokedSession = await fetch(`${provider}/api/auth/get-session`, {
+      headers: { cookie: sessionCookie! },
+    });
+    expect(await revokedSession.json()).toBeNull();
+    expect((await authPost("sign-in/email", { email, password })).status).toBeGreaterThanOrEqual(400);
+    expect((await authPost("sign-in/email", { email, password: "new-verified-password-456" })).status).toBe(200);
+  });
+
+  test("rejects invalid reset tokens through the public HTTP API", async () => {
+    const response = await authPost("reset-password", {
+      token: crypto.randomUUID(),
+      newPassword: "new-verified-password-456",
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
 async function authPost(path: string, body: object) {
   return fetch(`${provider}/api/auth/${path}`, {
     method: "POST",
