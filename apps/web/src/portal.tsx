@@ -1,3 +1,4 @@
+import { authorizationResume, resumeSignInPath, verificationCallback } from "./authorization-resume";
 import { authClient } from "./auth-client";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -66,9 +67,10 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
   const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
   const hasAuthorizationRequest = oauthQuery !== null;
-  const recoveryReturnTo = hasAuthorizationRequest && oauthQuery
-    ? `/sign-in?oauth_query=${encodeURIComponent(oauthQuery)}`
-    : "/sign-in";
+  const resume = authorizationResume(params?.get("resume_redirect_uri")
+    ? `client_id=${encodeURIComponent(params.get("resume_client_id") ?? "")}&redirect_uri=${encodeURIComponent(params.get("resume_redirect_uri")!)}`
+    : oauthQuery);
+  const recoveryReturnTo = resumeSignInPath(resume);
 
   const verificationError = params?.get("error") === "EMAIL_NOT_VERIFIED" || params?.get("error_description")?.toLowerCase().includes("email not verified");
 
@@ -81,10 +83,17 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     if (mode === "home" && session === null) window.location.replace("/sign-in");
   }, [mode, session]);
   useEffect(() => {
-    if (mode === "sign-in" && session?.user && hasAuthorizationRequest && oauthQuery) {
-      window.location.replace(`/api/auth/oauth2/authorize?${oauthQuery}`);
+    if (mode === "sign-in" && session?.user && !hasAuthorizationRequest && resume) {
+      const query = new URLSearchParams({ client_id: resume.clientId, redirect_uri: resume.redirectUri });
+      void fetch(`/api/auth/relying-party-destination?${query}`)
+        .then(async (response) => {
+          const result: { destination?: unknown } = await response.json();
+          if (!response.ok || typeof result.destination !== "string") throw new Error("Relying Party request is no longer available.");
+          window.location.replace(result.destination);
+        })
+        .catch(() => setError("Your original application request expired. Return to that application and start sign-in again."));
     }
-  }, [mode, session, hasAuthorizationRequest, oauthQuery]);
+  }, [mode, session, hasAuthorizationRequest, resume?.clientId, resume?.redirectUri]);
 
   if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true">●</span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
   if (mode === "home") return <main className="portal-shell"><header className="topbar"><Brand /></header><section className="loading-panel" role="status">{session === null ? "Opening sign-in…" : "Checking your Central SSO Session…"}</section></main>;
@@ -97,7 +106,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     const identifier = String(fields.get("identifier"));
     const callbackURL = hasAuthorizationRequest && oauthQuery
       ? `/api/auth/oauth2/authorize?${oauthQuery}`
-      : "/";
+      : resume ? resumeSignInPath(resume) : "/";
     try {
       const result = identifier.includes("@")
         ? await authClient.signIn.email({
@@ -126,7 +135,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
         provider,
         callbackURL: hasAuthorizationRequest && oauthQuery
           ? `/api/auth/oauth2/authorize?${oauthQuery}`
-          : "/",
+          : resume ? resumeSignInPath(resume) : "/",
       });
       if (error) throw error;
     } catch {
@@ -187,9 +196,7 @@ export function Enrollment() {
     setPending(true);
     setError("");
     const fields = new FormData(event.currentTarget);
-    const callback = new URL("/sign-in", window.location.origin);
-    callback.searchParams.set("verified", "1");
-    if (oauthQuery) callback.searchParams.set("oauth_query", oauthQuery);
+    const callback = new URL(verificationCallback(window.location.origin, authorizationResume(oauthQuery)));
     try {
       const response = await fetch("/api/auth/sign-up/email", {
         method: "POST",

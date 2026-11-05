@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 const provider = process.env.TEST_PROVIDER_URL;
 const mailpit = process.env.TEST_MAILPIT_URL;
+const relyingPartyClientId = process.env.TEST_RP_CLIENT_ID;
+const relyingPartyRedirectUri = process.env.TEST_RP_REDIRECT_URI;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
@@ -140,6 +142,23 @@ async function authPost(path: string, body: object) {
   });
 
 
+  test.skipIf(!relyingPartyClientId || !relyingPartyRedirectUri)(
+    "restores only a registered relying-party origin after authorization state expires",
+    async () => {
+      const query = new URLSearchParams({
+        client_id: relyingPartyClientId!,
+        redirect_uri: relyingPartyRedirectUri!,
+      });
+      const restored = await fetch(`${provider}/api/auth/relying-party-destination?${query}`);
+      expect(restored.status).toBe(200);
+      expect(await restored.json()).toEqual({ destination: new URL(relyingPartyRedirectUri!).origin });
+
+      query.set("redirect_uri", "https://attacker.example/callback");
+      const rejected = await fetch(`${provider}/api/auth/relying-party-destination?${query}`);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({ destination: null });
+    },
+  );
   test("keeps public OIDC discovery and readiness available", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);

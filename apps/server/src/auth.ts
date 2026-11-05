@@ -6,6 +6,7 @@ import { jwt, username } from "better-auth/plugins";
 import nodemailer from "nodemailer";
 import { db } from "@central-identity/db";
 import * as schema from "@central-identity/db/schema";
+import { allowCredentialSignup } from "./enrollment-invitation";
 const required = (name: string): string => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -33,7 +34,6 @@ const githubClientId = oauthEnabled ? required("GITHUB_CLIENT_ID") : undefined;
 const githubClientSecret = oauthEnabled ? required("GITHUB_CLIENT_SECRET") : undefined;
 const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
 const readingClientId = process.env.READING_OIDC_CLIENT_ID;
-const productionRuntime = production && !testProduction;
 const smtpPort = Number(required("SMTP_PORT"));
 if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
   throw new Error("SMTP_PORT must be a valid TCP port");
@@ -72,24 +72,26 @@ export const auth = betterAuth({
         before: async (newUser, endpoint) => {
           const path = endpoint?.request && new URL(endpoint.request.url).pathname;
           if (path === "/api/auth/sign-up/email") {
-            if (productionRuntime) {
-              const token = endpoint?.request?.headers.get("x-enrollment-invitation");
-              if (!token || typeof newUser.email !== "string") return false;
-              const adapter = await getCurrentAdapter(endpoint.context.adapter);
-              const now = new Date();
-              const invitation = await adapter.update({
-                model: "enrollmentInvitation",
-                where: [
-                  { field: "tokenHash", value: createHash("sha256").update(token).digest("hex") },
-                  { field: "email", value: newUser.email.trim().toLowerCase() },
-                  { field: "expiresAt", operator: "gt", value: now },
-                  { field: "consumedAt", value: null },
-                ],
-                update: { consumedAt: now },
-              });
-              if (!invitation) return false;
-            }
-            return typeof newUser.username === "string" && newUser.username.length > 0 ? undefined : false;
+            return allowCredentialSignup({
+              productionRuntime,
+              newUser,
+              invitationToken: endpoint?.request?.headers.get("x-enrollment-invitation"),
+              consumeInvitation: async (token, email) => {
+                const adapter = await getCurrentAdapter(endpoint!.context.adapter);
+                const now = new Date();
+                const invitation = await adapter.update({
+                  model: "enrollmentInvitation",
+                  where: [
+                    { field: "tokenHash", value: createHash("sha256").update(token).digest("hex") },
+                    { field: "email", value: email.trim().toLowerCase() },
+                    { field: "expiresAt", operator: "gt", value: now },
+                    { field: "consumedAt", value: null },
+                  ],
+                  update: { consumedAt: now },
+                });
+                return Boolean(invitation);
+              },
+            });
           }
           if (newUser.email && newUser.emailVerified) return;
           return false;
