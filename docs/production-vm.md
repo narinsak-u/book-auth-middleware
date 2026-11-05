@@ -4,7 +4,7 @@
 
 ## Operator prerequisites
 
-Before deploying, provide controlled hostnames, public DNS pointing both names to this VM, firewall access for TCP 80/443 (and UDP 443 if using HTTP/3), SMTP submission credentials, and independent Reading/Identity/Postgres/payment/OIDC credentials. This repository has no owned domain, DNS, SMTP credentials, or Vercel access; none of the public-domain/TLS/email behavior is claimed as verified.
+Before deploying, provide operator-controlled hostnames for Central Identity, Book Bidding, and Read in Peace, public DNS pointing them to the correct provider VM or Vercel project, HTTPS callbacks, and firewalls allowing TCP 80/443 (and UDP 443 if using HTTP/3). Supply authenticated SMTP and independent database, payment, and OIDC credentials. This repository has no owned domain, DNS, SMTP credentials, or Vercel access; none of the public-domain/TLS/email behavior is claimed as verified.
 
 Create the production env file from `.env.production.example` and populate every required value using operator-controlled secrets. Never commit plaintext secrets. Required host settings:
 
@@ -12,10 +12,37 @@ Create the production env file from `.env.production.example` and populate every
 - `READING_DOMAIN=reading.<operator-domain>`
 - `READING_OIDC_REDIRECT_URI=https://reading.<operator-domain>/api/auth/callback/central-identity`
 - `READING_OIDC_CLIENT_ID` and `READING_OIDC_CLIENT_SECRET` from the provisioned Reading relying party; register the exact callback above.
+- Keep the Book Bidding client separate from Reading: register `https://<bidding-host>/api/auth/callback/central-identity` for its distinct client and use the same client ID/secret in Central Identity and the Vercel Production runtime.
 - `READING_DATABASE_URL` must point to the Reading database using the Reading Postgres credentials. Keep provider `DATABASE_URL` and `POSTGRES_PASSWORD` separate from all Reading database credentials.
 - SMTP host, port, sender, authenticated username, and password; use the provider-supported authenticated TLS configuration.
 
 Keep `ALLOW_SIGN_UP` unset: provider invitation gating is enforced by the application and this deployment does not restore the legacy toggle.
+
+## Operator go-live checklist
+
+Before declaring public production success, require:
+
+- Verified, restorable backups for Central Identity, Read in Peace, and Book Bidding's operator-owned database; test restores in isolation.
+- Owned DNS and valid HTTPS for all three application hosts.
+- Separate Central Identity client IDs and secrets for Bidding and Reading, with each exact HTTPS callback registered.
+- Successful invitation delivery through authenticated production SMTP.
+- Access to the Vercel Production environment and confirmation its protected runtime values match the approved Bidding client and Central Identity issuer.
+- A three-app sign-in and sign-out check covering local Application Sessions and Central SSO Session boundaries.
+
+## Synthetic preflight and go-live boundary
+
+Run the synthetic checks before requesting operator credentials:
+
+```sh
+# From the provider checkout; exercises synthetic Compose settings and isolated test data.
+scripts/production-compose-smoke.sh
+
+# From the Book Bidding checkout; checks private runtime settings, production issuer,
+# exact callback derived from the configured Vercel host, and fail-closed missing secrets.
+bun run test:unit -- --run src/tests/auth-runtime-settings.test.ts
+```
+
+The Compose smoke exercises provider and Reading container health, shared Caddy routing, discovery issuer, Reading auth routing, separate databases, and required-secret failure. The Bidding unit test exercises its private runtime settings contract; it does not prove that the Vercel project has the same values. Local synthetic checks do not verify owned-domain DNS, public HTTPS certificates, authenticated SMTP delivery, real database backups/restores, Vercel deployment settings, or the three-app sign-in/sign-out journey on production. Complete those operator checks before declaring the rollout live. No production database or credential is used by these tests.
 
 ## Preserve Reading database and user data
 
@@ -39,8 +66,5 @@ With both checkouts adjacent, run Compose through dotenvx so it receives decrypt
 ./node_modules/.bin/dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml up -d --wait
 ```
 
-Do not run the seed command in production. Check `docker compose ... ps` and logs for every service; Caddy must be the only service publishing 80/443. Confirm both hostnames route, the Central Identity discovery issuer is `https://identity.<operator-domain>`, and Reading's OIDC callback equals the registered URI above. Back up both databases independently on a recurring schedule and rehearse restore without attaching a restore volume to the live stack.
+Do not run the seed command in production. Check `docker compose ... ps` and logs for every service; Caddy must be the only service publishing 80/443. Confirm the provider and Reading host routes, the Central Identity discovery issuer is `https://identity.<operator-domain>/api/auth`, and Reading's OIDC callback equals the registered URI above. Back up the provider and Reading databases independently on a recurring schedule and rehearse restore without attaching a restore volume to the live stack. Book Bidding's database backup is separately operator-owned and must also be verified before deployment.
 
-## Synthetic non-production proof
-
-Run `scripts/production-compose-smoke.sh` from the provider checkout with Docker available. It supplies synthetic `.localhost` settings, checks Compose rejects missing required configuration, builds and waits for container health, then checks both host routes, the issuer, and the Reading OIDC redirect URI. The script creates and removes only a uniquely named disposable Reading volume and Compose project; it does not use operator env files, DNS, SMTP credentials, or production data. Its `curl --insecure` is limited to this synthetic local-Caddy proof and is not a production TLS check. Public DNS, certificate issuance, and authenticated SMTP delivery remain unverified until operator resources exist.
