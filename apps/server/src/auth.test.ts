@@ -14,7 +14,7 @@ async function authPost(path: string, body: object) {
 }
 
   test("accepts open credential registration and rejects duplicate usernames", async () => {
-    const username = `person-${crypto.randomUUID().slice(0, 8)}`;
+    const username = `person_${crypto.randomUUID().slice(0, 8)}`;
     const email = `${crypto.randomUUID()}@example.test`;
     const signup = await authPost("sign-up/email", {
       name: "Registration User",
@@ -34,7 +34,7 @@ async function authPost(path: string, body: object) {
   });
 
   test.skipIf(!mailpit)("verifies open registration before username and email sign-in", async () => {
-    const username = `person-${crypto.randomUUID().slice(0, 8)}`;
+    const username = `person_${crypto.randomUUID().slice(0, 8)}`;
     const email = `${crypto.randomUUID()}@example.test`;
     const signup = await authPost("sign-up/email", {
       name: "Verified User",
@@ -63,7 +63,7 @@ async function authPost(path: string, body: object) {
       expect(signin.headers.get("set-cookie")).toContain("session_token=");
     }
     const absent = await authPost("sign-in/username", {
-      username: `missing-${crypto.randomUUID()}`,
+      username: `missing_${crypto.randomUUID()}`,
       password: "wrong-password-123",
     });
     const wrong = await authPost("sign-in/username", {
