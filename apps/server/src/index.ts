@@ -18,13 +18,13 @@ const app = new Elysia()
     if (path !== "/api/auth/sign-up/email") return;
     const token = request.headers.get("x-enrollment-invitation");
     if (!token) return new Response("A valid enrollment invitation is required", { status: 403 });
-    let body: { email?: unknown };
+    let body: unknown;
     try {
       body = await request.clone().json();
     } catch {
       return new Response("A valid enrollment invitation is required", { status: 400 });
     }
-    if (typeof body.email !== "string") {
+    if (body === null || typeof body !== "object" || !("email" in body) || typeof body.email !== "string") {
       return new Response("A valid enrollment invitation is required", { status: 403 });
     }
     const email = body.email.trim().toLowerCase();

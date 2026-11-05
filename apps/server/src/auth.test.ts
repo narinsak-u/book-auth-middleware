@@ -97,6 +97,12 @@ describe("central identity public HTTP behavior", () => {
       body: JSON.stringify({ name: "Uninvited", email: `uninvited-${crypto.randomUUID()}@example.test`, password }),
     });
     expect(response.status).toBe(403);
+    const malformed = await fetch(`${provider}/api/auth/sign-up/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-enrollment-invitation": crypto.randomUUID() },
+      body: "null",
+    });
+    expect(malformed.status).toBe(403);
   });
   test("enrolls only the invited email, verifies it, then permits ordinary sign-in", async () => {
     const address = `invited-${crypto.randomUUID()}@example.test`;
