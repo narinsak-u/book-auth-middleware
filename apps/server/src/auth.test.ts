@@ -119,20 +119,33 @@ describe("central identity public HTTP behavior", () => {
     expect((await signUp(address.toUpperCase(), token)).ok).toBe(true);
   }, 60_000);
 
-  test("refuses expired invitations", async () => {
+  test("reports expired invitations distinctly", async () => {
     const address = `expired-${crypto.randomUUID()}@example.test`;
-    const token = await issueInvitation(address);
-    await db.update(enrollmentInvitation).set({ expiresAt: new Date(Date.now() - 1000) })
-      .where(eq(enrollmentInvitation.email, address));
-    expect((await signUp(address, token)).ok).toBe(false);
-  }, 60_000);
+    const token = crypto.randomUUID();
+    await db.insert(enrollmentInvitation).values({
+      id: crypto.randomUUID(),
+      email: address,
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const expired = await signUp(address, token);
+    expect(expired.status).toBe(410);
+    expect(await expired.json()).toEqual({ code: "INVITATION_EXPIRED" });
+  });
 
-  test("cannot redeem an invitation twice", async () => {
+  test("rejects a consumed invitation before Better Auth's duplicate-user response", async () => {
     const address = `replay-${crypto.randomUUID()}@example.test`;
-    const token = await issueInvitation(address);
-    expect((await signUp(address, token)).ok).toBe(true);
-    expect((await signUp(address, token)).ok).toBe(false);
-  }, 60_000);
+    const token = crypto.randomUUID();
+    await db.insert(user).values({ id: crypto.randomUUID(), name: "Previously Enrolled", email: address });
+    await db.insert(enrollmentInvitation).values({
+      id: crypto.randomUUID(),
+      email: address,
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: new Date(),
+    });
+    expect((await signUp(address, token)).status).toBe(403);
+  });
 
   test("does not consume an invitation when an existing identity blocks user creation", async () => {
     const address = `existing-${crypto.randomUUID()}@example.test`;

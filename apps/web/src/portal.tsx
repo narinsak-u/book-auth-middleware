@@ -160,7 +160,9 @@ export function Enrollment() {
           callbackURL: `${window.location.origin}/sign-in?verified=1`,
         }),
       });
-      if (response.ok) {
+      if (response.status === 410) {
+        setError("This invitation has expired. Ask an operator to send a new invitation.");
+      } else if (response.ok) {
         setSubmitted(true);
       } else {
         setError("This identity could not be created. Check the invitation and details, then try again.");
