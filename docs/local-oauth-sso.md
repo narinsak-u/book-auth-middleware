@@ -198,6 +198,24 @@ uses these entry points:
    Central Identity must not claim an existing application user's records.
    Retired local login endpoints must not establish application sessions.
 
+5. For repeatable Book Bidding browser coverage, use a dedicated, verified
+   development Central Identity. From `book-bidding/`, enter credentials
+   without adding the password to shell history:
+
+   ```sh
+   read -r -p "Central Identity test email: " CENTRAL_IDENTITY_TEST_EMAIL
+   read -r -s -p "Central Identity test password: " CENTRAL_IDENTITY_TEST_PASSWORD
+   printf '\n'
+   export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
+   BIDDING_OIDC_TEST_ORIGIN=https://bidding.127.0.0.1.sslip.io:8080 \
+     CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.127.0.0.1.nip.io:8080 \
+     bun scripts/test-oidc-browser.ts
+   unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
+   ```
+
+   The browser test checks the protected-page return, local sign-out, and
+   fresh sign-in through the still-active Central SSO Session.
+
 The verified browser checks covered the Bidding header-to-Central-Identity
 callback and dashboard return, then the Read in Peace header-to-Central flow
 in the same browser context. Both `/api/auth/get-session` endpoints reported
