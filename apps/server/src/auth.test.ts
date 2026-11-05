@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@central-identity/db";
-import { enrollmentInvitation } from "@central-identity/db/schema";
+import { enrollmentInvitation, user } from "@central-identity/db/schema";
 
 const provider = process.env.TEST_PROVIDER_URL ?? "https://auth.127.0.0.1.nip.io";
 const inbox = process.env.TEST_MAILPIT_URL ?? "http://localhost:8025";
@@ -132,6 +133,24 @@ describe("central identity public HTTP behavior", () => {
     expect((await signUp(address, token)).ok).toBe(true);
     expect((await signUp(address, token)).ok).toBe(false);
   }, 60_000);
+
+  test("does not consume an invitation when an existing identity blocks user creation", async () => {
+    const address = `existing-${crypto.randomUUID()}@example.test`;
+    const token = crypto.randomUUID();
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    await db.insert(user).values({ id: crypto.randomUUID(), name: "Existing User", email: address });
+    await db.insert(enrollmentInvitation).values({
+      id: crypto.randomUUID(),
+      email: address,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    expect((await signUp(address, token)).ok).toBe(true);
+    const [invitation] = await db.select({ consumedAt: enrollmentInvitation.consumedAt })
+      .from(enrollmentInvitation).where(eq(enrollmentInvitation.tokenHash, tokenHash));
+    expect(invitation?.consumedAt).toBeNull();
+  });
 
   test("concurrent redemption creates at most one identity", async () => {
     const address = `race-${crypto.randomUUID()}@example.test`;
