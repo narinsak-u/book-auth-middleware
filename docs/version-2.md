@@ -1,8 +1,7 @@
 # Central Identity — Authentication Portal v2
 
-**Status:** agreed design; not yet implemented  
-**Scope:** migrate this repository's provider and add its Authentication Portal; keep Book Bidding and Read in Peace independently deployed  
-**First delivery:** working local HTTPS integration, not a production deployment
+**Status:** historical implementation plan; superseded by ADR-0002 and the current README  
+**Scope:** original v2 portal delivery; not current Central authentication behavior
 
 ## 1. Goal and existing baseline
 
@@ -69,8 +68,8 @@ Disable must prevent a Central Identity from starting new OIDC authorization, re
 
 | Relying Party | Public callback | Ownership |
 | --- | --- | --- |
-| Book Bidding | `https://bidding.127.0.0.1.sslip.io/api/auth/callback/central-identity` | SvelteKit and its own Application Users, Identity Links, database, sessions, and authorization. |
-| Read in Peace | `https://reading.lvh.me/api/auth/callback/central-identity` | Nuxt/NestJS and its own Application Users, Identity Links, database, sessions, and authorization. |
+| Book Bidding | `https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity` | SvelteKit and its own Application Users, Identity Links, database, sessions, and authorization. |
+| Read in Peace | `https://reading.lvh.me:8080/api/auth/callback/central-identity` | Nuxt/NestJS and its own Application Users, Identity Links, database, sessions, and authorization. |
 
 Keep both existing confidential first-party registrations: exact callback URI, authorization code, PKCE S256, `client_secret_basic`, and `openid email profile` scopes. Both explicitly skip consent; unregistered clients are rejected. This delivery does **not** support a third-party client that requires consent. Do not claim universal consent skipping or silently approve a client that was not provisioned as trusted. Retain the existing local-session-first login behavior, independent local sign-out, and explicit proof-of-both-accounts Identity Links. Matching email addresses never link an existing Application User to a Central Identity (ADR 0001).
 

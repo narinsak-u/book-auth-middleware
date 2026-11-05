@@ -28,10 +28,18 @@ _Avoid_: SSO session
 An independently operated application that accepts Central Identity authentication while retaining its own Application Users, Application Sessions, and access rules.
 _Avoid_: Demo application, shared application
 
-**Enrollment Invitation**:
-A single-use, email-bound, time-limited authorization to enroll a Central Identity. It grants no Application User status or access to a Relying Party and expires after seven days.
-_Avoid_: Registration token, Application invitation, Identity Link
+**External Provider**:
+An independently operated identity service, such as Google or GitHub, used to authenticate a Central Identity. It is not a Relying Party.
+_Avoid_: Relying Party, Central Identity
+
+**Provider Link**:
+The association between an External Provider account and a Central Identity. A second provider requires explicit linking, not a matching email address.
+_Avoid_: Identity Link, Email match
+
+**Reviewed Recovery**:
+Restoration of control of an existing Central Identity after independent proof of ownership. A matching email address alone is insufficient.
+_Avoid_: Automatic email linking
 
 **Authentication Portal**:
-The Central Identity user interface for signing in, enrolling, recovering credentials, and ending the Central SSO Session.
+The Central Identity user interface for signing in through External Providers, linking providers, and ending the Central SSO Session.
 _Avoid_: Application dashboard, launcher

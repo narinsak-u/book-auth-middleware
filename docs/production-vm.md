@@ -16,7 +16,7 @@ Create the production env file from `.env.production.example` and populate every
 - `READING_DATABASE_URL` must point to the Reading database using the Reading Postgres credentials. Keep provider `DATABASE_URL` and `POSTGRES_PASSWORD` separate from all Reading database credentials.
 - SMTP host, port, sender, authenticated username, and password; use the provider-supported authenticated TLS configuration.
 
-Keep `ALLOW_SIGN_UP` unset: provider invitation gating is enforced by the application and this deployment does not restore the legacy toggle.
+Live production keeps its existing invitation/password flow in this cutover; keep `ALLOW_SIGN_UP` unset. Do not enable production OAuth providers yet. A later production cutover must register `https://<AUTH_DOMAIN>/api/auth/callback/google` and `https://<AUTH_DOMAIN>/api/auth/callback/github`.
 
 ## Operator go-live checklist
 
@@ -25,7 +25,7 @@ Before declaring public production success, require:
 - Verified, restorable backups for Central Identity, Read in Peace, and Book Bidding's operator-owned database; test restores in isolation.
 - Owned DNS and valid HTTPS for all three application hosts.
 - Separate Central Identity client IDs and secrets for Bidding and Reading, with each exact HTTPS callback registered.
-- Successful invitation delivery through authenticated production SMTP.
+- Successful existing invitation/password sign-in and three-app SSO checks.
 - Access to the Vercel Production environment and confirmation its protected runtime values match the approved Bidding client and Central Identity issuer.
 - A three-app sign-in and sign-out check covering local Application Sessions and Central SSO Session boundaries.
 
