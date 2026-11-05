@@ -135,10 +135,14 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   </main>;
 }
 export function Enrollment() {
-  const invitation = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("invitation") ?? "";
+  const [invitation, setInvitation] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    setInvitation(new URLSearchParams(window.location.search).get("invitation") ?? "");
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
