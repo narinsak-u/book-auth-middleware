@@ -82,6 +82,7 @@ provider repository root, issue its invitation through the operator CLI:
 
 ```sh
 bunx dotenvx run --strict --overload -f .env.development -- \
+  docker compose --env-file /dev/null exec -T auth \
   bun run --filter @central-identity/server issue:enrollment-invitation -- \
   'invite-<unique-suffix>@example.test'
 ```
