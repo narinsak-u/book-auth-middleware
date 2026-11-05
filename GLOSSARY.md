@@ -29,8 +29,8 @@ An independently operated application that accepts Central Identity authenticati
 _Avoid_: Demo application, shared application
 
 **Enrollment Invitation**:
-A single-use, email-bound authorization for one person to enroll a Central Identity; it expires after seven days.
-_Avoid_: Registration token
+A single-use, email-bound, time-limited authorization to enroll a Central Identity. It grants no Application User status or access to a Relying Party and expires after seven days.
+_Avoid_: Registration token, Application invitation, Identity Link
 
 **Authentication Portal**:
 The Central Identity user interface for signing in, enrolling, recovering credentials, and ending the Central SSO Session.
