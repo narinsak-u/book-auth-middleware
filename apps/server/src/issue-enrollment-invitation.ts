@@ -6,12 +6,16 @@ import { enrollmentInvitation } from "@central-identity/db/schema";
 
 try {
   const email = process.argv[2]?.trim().toLowerCase();
+  if (process.env.NODE_ENV !== "production" || process.env.TEST_PRODUCTION === "true") {
+    throw new Error("Invitation enrollment is disabled outside live production.");
+  }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error("Usage: bun run issue:enrollment-invitation <email>");
   }
   if ((await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1)).length) {
     throw new Error("That address already has a Central Identity");
   }
+
   const production = process.env.NODE_ENV === "production";
   const host = production ? process.env.SMTP_HOST : process.env.SMTP_HOST ?? "localhost";
   const port = Number(production ? process.env.SMTP_PORT : process.env.SMTP_PORT ?? 1025);
@@ -23,9 +27,9 @@ try {
   if (production && (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD)) {
     throw new Error("Production SMTP credentials are required");
   }
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const token = randomBytes(32).toString("base64url");
   const id = randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await db.insert(enrollmentInvitation).values({
     id,
     email,

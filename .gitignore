@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 central-identity-root.crt
+central-test-production-root.crt
 
 # debug
 npm-debug.log*
@@ -32,8 +33,10 @@ yarn-error.log*
 
 .env
 /.env.keys
+/.env.test-production.keys
 !/.env.development
 !/.env.production
+!/.env.test-production
 # local env files
 .env.local
 .env.development.local

@@ -70,7 +70,6 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .recovery-panel label { margin-top: 8px; color: #233d55; font-size: .92rem; font-weight: 600; }
 .recovery-panel input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid #aebfcb; border-radius: 2px; background: var(--paper); color: var(--ink); }
 .recovery-panel input:disabled { background: #f3f6f8; }
-.recovery-back { margin: 24px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.6; }
 @media (max-width: 760px) { .recovery-panel { margin: 48px auto; } }
 @media (max-width: 760px) {
   .portal-shell { width: min(100% - 32px, 540px); }

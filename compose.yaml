@@ -25,9 +25,16 @@ services:
     working_dir: /app
     command: ["sh", "-c", "bun install --frozen-lockfile && bun run db:migrate && bun run start"]
     environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      TEST_PRODUCTION: ${TEST_PRODUCTION:-false}
+      AUTH_DOMAIN: ${AUTH_DOMAIN:-auth.127.0.0.1.nip.io:8080}
       DATABASE_URL: ${DATABASE_URL:-postgres://central:central-local-only@db:5432/central}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://auth.127.0.0.1.nip.io}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://auth.127.0.0.1.nip.io:8080}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-only-change-me-before-any-deployment-32chars}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_FROM: ${SMTP_FROM:-Central Identity <identity@localhost>}
@@ -54,6 +61,8 @@ services:
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     command: ["sh", "-c", "bun run web:start"]
     environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      TEST_PRODUCTION: ${TEST_PRODUCTION:-false}
       PORT: 3001
     volumes:
       - .:/app
@@ -70,14 +79,13 @@ services:
   caddy:
     image: caddy:2.10.0-alpine
     ports:
-      - "127.0.0.1:443:443"
-      - "127.0.0.1:443:443/udp"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DEV_HOST_IP:-host-gateway}"
     depends_on:
       auth:
         condition: service_healthy

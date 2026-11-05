@@ -12,9 +12,11 @@ const required = (name: string): string => {
   return value;
 };
 const production = process.env.NODE_ENV === "production";
+const testProduction = production && process.env.TEST_PRODUCTION === "true";
+const oauthFirst = !production || testProduction;
 const baseURL = production
   ? required("BETTER_AUTH_URL")
-  : process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io";
+  : process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io:8080";
 const authSecret = production
   ? required("BETTER_AUTH_SECRET")
   : process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars";
@@ -24,23 +26,24 @@ if (production) {
   }
   required("DATABASE_URL");
 }
+const googleClientId = oauthFirst ? required("GOOGLE_CLIENT_ID") : undefined;
+const googleClientSecret = oauthFirst ? required("GOOGLE_CLIENT_SECRET") : undefined;
+const githubClientId = oauthFirst ? required("GITHUB_CLIENT_ID") : undefined;
+const githubClientSecret = oauthFirst ? required("GITHUB_CLIENT_SECRET") : undefined;
 const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
 const readingClientId = process.env.READING_OIDC_CLIENT_ID;
-const smtpHost = production ? required("SMTP_HOST") : process.env.SMTP_HOST ?? "localhost";
-const smtpPort = Number(production ? required("SMTP_PORT") : process.env.SMTP_PORT ?? 1025);
-const smtpFrom = production ? required("SMTP_FROM") : process.env.SMTP_FROM ?? "Central Identity <identity@localhost>";
-if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+const productionRuntime = production && !testProduction;
+const smtpPort = productionRuntime ? Number(required("SMTP_PORT")) : 0;
+if (productionRuntime && (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535)) {
   throw new Error("SMTP_PORT must be a valid TCP port");
 }
-const mailer = nodemailer.createTransport({
-  host: smtpHost,
+const mailer = productionRuntime ? nodemailer.createTransport({
+  host: required("SMTP_HOST"),
   port: smtpPort,
   secure: smtpPort === 465,
-  ...(production ? { requireTLS: smtpPort !== 465, auth: {
-    user: required("SMTP_USER"),
-    pass: required("SMTP_PASSWORD"),
-  } } : {}),
-});
+  requireTLS: smtpPort !== 465,
+  auth: { user: required("SMTP_USER"), pass: required("SMTP_PASSWORD") },
+}) : undefined;
 
 export const auth = betterAuth({
   appName: "Central Identity",
@@ -54,11 +57,11 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (newUser, endpoint) => {
+          if (oauthFirst) return newUser.email && newUser.emailVerified ? undefined : false;
           const request = endpoint?.request;
           if (!request || new URL(request.url).pathname !== "/api/auth/sign-up/email") return;
           const token = request.headers.get("x-enrollment-invitation");
           if (!token || typeof newUser.email !== "string") return false;
-
           const now = new Date();
           const adapter = await getCurrentAdapter(endpoint.context.adapter);
           const invitation = await adapter.update({
@@ -76,30 +79,49 @@ export const auth = betterAuth({
       },
     },
   },
-  emailAndPassword: {
+  ...(oauthFirst ? {
+    account: { accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true } },
+  } : {}),
+  emailAndPassword: oauthFirst ? {
+    enabled: process.env.BIDDING_OIDC_PROVISIONING === "true",
+  } : {
     enabled: true,
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
     sendResetPassword: async ({ user, url }) => {
-      await mailer.sendMail({
-        from: smtpFrom,
+      await mailer!.sendMail({
+        from: required("SMTP_FROM"),
         to: user.email,
         subject: "Reset your Central Identity password",
         text: `Reset your password using this one-time link: ${url}`,
       });
     },
   },
-  emailVerification: {
-    sendOnSignUp: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      await mailer.sendMail({
-        from: smtpFrom,
-        to: user.email,
-        subject: "Verify your Central Identity email",
-        text: `Verify your email address: ${url}`,
-      });
+  ...(!oauthFirst ? {
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        await mailer!.sendMail({
+          from: required("SMTP_FROM"),
+          to: user.email,
+          subject: "Verify your Central Identity email",
+          text: `Verify your email address: ${url}`,
+        });
+      },
     },
+  } : {}),
+  socialProviders: {
+    ...(oauthFirst && googleClientId && googleClientSecret ? {
+      google: { clientId: googleClientId, clientSecret: googleClientSecret },
+    } : {}),
+    ...(oauthFirst && githubClientId && githubClientSecret ? {
+      github: {
+        clientId: githubClientId,
+        clientSecret: githubClientSecret,
+        scope: ["read:user", "user:email"],
+      },
+    } : {}),
   },
   plugins: [
     jwt(),

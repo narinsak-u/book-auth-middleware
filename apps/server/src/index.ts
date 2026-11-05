@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { databaseReady, db, enrollmentInvitation, user } from "@central-identity/db";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
-import { databaseReady, db, enrollmentInvitation, user } from "@central-identity/db";
+
+const oauthFirst = process.env.NODE_ENV !== "production" || process.env.TEST_PRODUCTION === "true";
 
 const app = new Elysia()
   .onRequest(async ({ request }) => {
@@ -15,32 +17,44 @@ const app = new Elysia()
       if (identity?.disabled) return new Response("Central Identity is disabled", { status: 403 });
       return;
     }
-    if (path !== "/api/auth/sign-up/email") return;
-    const token = request.headers.get("x-enrollment-invitation");
-    if (!token) return new Response("A valid enrollment invitation is required", { status: 403 });
-    let body: unknown;
-    try {
-      body = await request.clone().json();
-    } catch {
-      return new Response("A valid enrollment invitation is required", { status: 400 });
+    if (!oauthFirst) {
+      if (path !== "/api/auth/sign-up/email") return;
+      const token = request.headers.get("x-enrollment-invitation");
+      if (!token) return new Response("A valid enrollment invitation is required", { status: 403 });
+      let body: unknown;
+      try {
+        body = await request.clone().json();
+      } catch {
+        return new Response("A valid enrollment invitation is required", { status: 400 });
+      }
+      if (body === null || typeof body !== "object" || !("email" in body) || typeof body.email !== "string") {
+        return new Response("A valid enrollment invitation is required", { status: 403 });
+      }
+      const email = body.email.trim().toLowerCase();
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      const [invitation] = await db.select({
+        expiresAt: enrollmentInvitation.expiresAt,
+        consumedAt: enrollmentInvitation.consumedAt,
+      }).from(enrollmentInvitation).where(and(
+        eq(enrollmentInvitation.tokenHash, tokenHash),
+        eq(enrollmentInvitation.email, email),
+      )).limit(1);
+      if (!invitation || invitation.consumedAt) {
+        return new Response("A valid enrollment invitation is required", { status: 403 });
+      }
+      if (invitation.expiresAt <= new Date()) {
+        return Response.json({ code: "INVITATION_EXPIRED" }, { status: 410 });
+      }
+      return;
     }
-    if (body === null || typeof body !== "object" || !("email" in body) || typeof body.email !== "string") {
-      return new Response("A valid enrollment invitation is required", { status: 403 });
-    }
-    const email = body.email.trim().toLowerCase();
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    const [invitation] = await db.select({
-      expiresAt: enrollmentInvitation.expiresAt,
-      consumedAt: enrollmentInvitation.consumedAt,
-    }).from(enrollmentInvitation).where(and(
-      eq(enrollmentInvitation.tokenHash, tokenHash),
-      eq(enrollmentInvitation.email, email),
-    )).limit(1);
-    if (!invitation || invitation.consumedAt) {
-      return new Response("A valid enrollment invitation is required", { status: 403 });
-    }
-    if (invitation.expiresAt <= new Date()) {
-      return Response.json({ code: "INVITATION_EXPIRED" }, { status: 410 });
+    if ([
+      "/api/auth/sign-up/email",
+      "/api/auth/sign-in/email",
+      "/api/auth/forget-password",
+      "/api/auth/request-password-reset",
+      "/api/auth/reset-password",
+    ].includes(path)) {
+      return new Response("Password authentication and signup are disabled. Use Google or GitHub.", { status: 410 });
     }
   })
   .onAfterHandle(({ request, response }) => {
@@ -63,6 +77,7 @@ const app = new Elysia()
       status: response.status,
     }));
   })
+  .get("/api/auth/config", () => ({ oauthFirst }))
   .get("/health/live", () => ({ status: "live" }))
   .get("/health/ready", async ({ set }) => {
     try {

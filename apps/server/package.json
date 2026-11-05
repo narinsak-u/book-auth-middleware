@@ -4,11 +4,13 @@
   "scripts": {
     "build": "bun build src/index.ts --target=bun --outdir=dist",
     "typecheck": "tsc --noEmit -p ../../tsconfig.json",
-    "test": "bun test src/auth.test.ts",
+    "test": "bun test src/auth.test.ts src/provider-proof.test.ts",
+    "test:integration": "test -n \"$TEST_PROVIDER_URL\" && bun test src/auth.test.ts",
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "disable:central-identity": "bun src/disable-central-identity.ts",
     "issue:enrollment-invitation": "bun src/issue-enrollment-invitation.ts",
+    "recover-identity": "bun src/recover-identity.ts",
     "provision:bidding": "bun src/provision-bidding.ts",
     "provision:reading": "bun src/provision-reading.ts"
   },
