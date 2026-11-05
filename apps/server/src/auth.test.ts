@@ -63,7 +63,7 @@ async function authPost(path: string, body: object) {
       expect(signin.headers.get("set-cookie")).toContain("session_token=");
     }
     const absent = await authPost("sign-in/username", {
-      username: `missing_${crypto.randomUUID()}`,
+      username: `missing_${crypto.randomUUID().replaceAll("-", "_")}`,
       password: "wrong-password-123",
     });
     const wrong = await authPost("sign-in/username", {
