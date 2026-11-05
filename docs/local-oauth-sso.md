@@ -182,21 +182,21 @@ Use a browser that trusts Caddy's local root CA. The verified development flow
 uses these entry points:
 
 1. Open `https://bidding.127.0.0.1.sslip.io:8080` and select **Sign In** in
-the header. Complete credential sign-in or registration at Central Identity.
-Confirm the browser returns to `/dashboard` and
-`/api/auth/get-session` reports an authenticated Application Session.
+   the header. Complete credential sign-in or registration at Central Identity.
+   Confirm the browser returns to `/dashboard` and
+   `/api/auth/get-session` reports an authenticated Application Session.
 2. In the same browser profile, open
-`https://reading.lvh.me:8080/dashboard` and select **Sign In** if redirected
-there. Confirm Central Identity reuses its existing SSO Session without
-prompting for credentials, then confirm Read in Peace has its own
-authenticated Application Session.
+   `https://reading.lvh.me:8080/dashboard` and select **Sign In** if redirected
+   there. Confirm Central Identity reuses its existing SSO Session without
+   prompting for credentials, then confirm Read in Peace has its own
+   authenticated Application Session.
 3. Sign out locally in one application and confirm only that Application
-Session ends. End the Central SSO Session and do not expect it to revoke
-either application's existing Application Session. A new authorization
-requires Central sign-in again.
+   Session ends. End the Central SSO Session and do not expect it to revoke
+   either application's existing Application Session. A new authorization
+   requires Central sign-in again.
 4. Test unlinked-user recovery only through the reviewed process. A same-email
-Central Identity must not claim an existing application user's records.
-Retired local login endpoints must not establish application sessions.
+   Central Identity must not claim an existing application user's records.
+   Retired local login endpoints must not establish application sessions.
 
 The verified browser checks covered the Bidding header-to-Central-Identity
 callback and dashboard return, then the Read in Peace header-to-Central flow
