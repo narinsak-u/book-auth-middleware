@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { databaseReady, db, user } from "@central-identity/db";
+import { databaseReady, db, oauthClient, user } from "@central-identity/db";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
 
@@ -38,6 +38,28 @@ const app = new Elysia()
     }));
   })
   .get("/api/auth/config", () => ({ oauthEnabled }))
+  .get("/api/auth/relying-party-destination", async ({ query, set }) => {
+    const clientId = typeof query.client_id === "string" ? query.client_id : "";
+    const redirectUri = typeof query.redirect_uri === "string" ? query.redirect_uri : "";
+    if (!clientId || !redirectUri) {
+      set.status = 400;
+      return { destination: null };
+    }
+    const [client] = await db.select({
+      disabled: oauthClient.disabled,
+      redirectUris: oauthClient.redirectUris,
+    }).from(oauthClient).where(eq(oauthClient.clientId, clientId)).limit(1);
+    if (!client || client.disabled || !client.redirectUris.includes(redirectUri)) {
+      set.status = 400;
+      return { destination: null };
+    }
+    const destination = new URL(redirectUri);
+    if (destination.protocol !== "https:") {
+      set.status = 400;
+      return { destination: null };
+    }
+    return { destination: destination.origin };
+  })
   .get("/health/live", () => ({ status: "live" }))
   .get("/health/ready", async ({ set }) => {
     try {
