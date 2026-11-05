@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { betterAuth } from "better-auth";
+import { betterAuth, getCurrentAdapter } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import nodemailer from "nodemailer";
 import { db } from "@central-identity/db";
@@ -49,6 +50,32 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   advanced: { useSecureCookies: true },
   session: { expiresIn: 7 * 24 * 60 * 60 },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (newUser, endpoint) => {
+          const request = endpoint?.request;
+          if (!request || new URL(request.url).pathname !== "/api/auth/sign-up/email") return;
+          const token = request.headers.get("x-enrollment-invitation");
+          if (!token || typeof newUser.email !== "string") return false;
+
+          const now = new Date();
+          const adapter = await getCurrentAdapter(endpoint.context.adapter);
+          const invitation = await adapter.update({
+            model: "enrollmentInvitation",
+            where: [
+              { field: "tokenHash", value: createHash("sha256").update(token).digest("hex") },
+              { field: "email", value: newUser.email.trim().toLowerCase() },
+              { field: "expiresAt", operator: "gt", value: now },
+              { field: "consumedAt", value: null },
+            ],
+            update: { consumedAt: now },
+          });
+          if (!invitation) return false;
+        },
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
