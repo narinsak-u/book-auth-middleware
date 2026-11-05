@@ -47,8 +47,9 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
     const redirect = await fetch(resetURL!, { redirect: "manual" });
     const resetPage = new URL(redirect.headers.get("location")!);
     const token = resetPage.searchParams.get("token");
+    if (!token) throw new Error("Password reset email had no token");
     expect(resetPage.searchParams.get("returnTo")).toBe(returnTo);
-    expect(resetPage.origin).toBe(provider);
+    expect(resetPage.origin).toBe(provider!);
 
     const reset = (newPassword: string) => authPost("reset-password", { token, newPassword });
     expect((await reset("new-verified-password-456")).status).toBe(200);
