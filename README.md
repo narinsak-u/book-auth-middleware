@@ -45,6 +45,12 @@ pg_restore --list central-before-migration.dump
 
 Keep the private `.env.keys` file backed up and outside Git: without its
 development private key, committed `.env.development` cannot be decrypted.
+
+Use `bun run env:decrypt -- -f .env.development` to decrypt settings for local
+inspection or editing, and `bun run env:encrypt -- -f .env.development` to
+encrypt them again. Use the same commands with `.env.production` when needed.
+The pre-commit hook encrypts staged root environment files; it never decrypts
+before commit. Keep `.env.keys` outside Git.
 Keep the database volume and existing client IDs/secrets stable across restarts.
 Use `bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null down`
 to stop services without removing data; never use `down -v` unless intentionally

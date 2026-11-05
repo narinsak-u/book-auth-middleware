@@ -17,11 +17,14 @@ function run(...cmd: string[]) {
 test("commit encrypts staged config but refuses staged private keys or partial edits", () => {
   mkdirSync(join(worktree, ".husky"));
   copyFileSync(join(root, ".husky/pre-commit"), join(worktree, ".husky/pre-commit"));
+  copyFileSync(join(root, "package.json"), join(worktree, "package.json"));
+  mkdirSync(join(worktree, "scripts"));
+  copyFileSync(join(root, "scripts/pre-commit-env.sh"), join(worktree, "scripts/pre-commit-env.sh"));
   symlinkSync(join(root, "node_modules"), join(worktree, "node_modules"), "dir");
   expect(run("git", "init", "-q").code).toBe(0);
   writeFileSync(join(worktree, ".env.development"), "HELLO=secret-smoke-value\nCOMPOSE_PROJECT_NAME=\"book-auth-middleware\"\n");
-  expect(run("bunx", "dotenvx", "encrypt", "-f", ".env.development").code).toBe(0);
-  expect(run("bunx", "dotenvx", "decrypt", "-f", ".env.development").code).toBe(0);
+  expect(run("bun", "run", "env:encrypt", "--", "-f", ".env.development").code).toBe(0);
+  expect(run("bun", "run", "env:decrypt", "--", "-f", ".env.development").code).toBe(0);
   expect(run("git", "add", ".env.development").code).toBe(0);
   expect(run("sh", ".husky/pre-commit").code).toBe(0);
   const staged = run("git", "show", ":.env.development").stdout;
