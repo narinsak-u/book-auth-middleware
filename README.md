@@ -13,10 +13,33 @@ For complete three-repository setup and browser tests, follow the
 Install Bun 1.4.2 or newer and Docker Engine with Compose. Port 8080 must be
 available. The development origins use HTTPS `.localhost` names:
 `https://auth.localhost:8080`, `https://bidding.localhost:8080`, and
-`https://reading.localhost:8080`. `.localhost` resolves to loopback in many
-resolvers, but WSL and Windows browser resolution can differ; test each in the
-actual browser. Caddy creates a local CA that the host, Node processes, and
-browser must trust.
+`https://reading.localhost:8080`. Caddy creates a local CA that the host, Node
+processes, and browser must trust.
+
+### Local host resolution
+
+If these names do not resolve to loopback, add this line to `/etc/hosts` in WSL
+and `C:\Windows\System32\drivers\etc\hosts` in Windows (edit as Administrator).
+It covers development and test-production origins:
+
+```text
+127.0.0.1 auth.localhost bidding.localhost reading.localhost auth-test.localhost bidding-test.localhost reading-test.localhost
+```
+
+Verify each name in WSL:
+
+```sh
+getent ahostsv4 auth.localhost bidding.localhost reading.localhost auth-test.localhost bidding-test.localhost reading-test.localhost
+```
+
+Verify each name in Windows PowerShell:
+
+```powershell
+'auth.localhost','bidding.localhost','reading.localhost','auth-test.localhost','bidding-test.localhost','reading-test.localhost' | ForEach-Object { "$_ $([System.Net.Dns]::GetHostAddresses($_) -join ',')" }
+```
+
+Each result must include `127.0.0.1`. Check from both environments and the
+browser host; do not add public DNS or expose the gateway.
 
 Install the pinned tools and start the development stack:
 
@@ -98,9 +121,20 @@ Party callback pairs must be:
 - Reading: `https://reading-test.localhost:8081/api/auth/callback/central-identity`
   and `https://reading-test.localhost:8081/api/identity-recovery/callback`
 
-Retarget the existing registrations from the auth repository root; these
-commands keep each client's ID and secret and replace only its callback pair:
+Before retargeting either existing test-production client, back up the isolated
+database and verify the dump's restore list:
 
+```sh
+set -eu
+umask 077
+backup="central-test-production-before-oauth-retarget-$(date +%Y%m%d%H%M%S).dump"
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml up -d db
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup"
+pg_restore --list "$backup" >/dev/null
+```
+
+Proceed with retargeting only if the dump and restore-list check succeed. These
+commands keep each client's ID and secret and replace only its callback pair:
 ```sh
 bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps -e OIDC_SIGN_IN_REDIRECT_URI=https://bidding-test.localhost:8081/api/auth/callback/central-identity -e OIDC_RECOVERY_REDIRECT_URI=https://bidding-test.localhost:8081/api/identity-recovery/callback auth bun run retarget:oauth-client bidding
 bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps -e OIDC_SIGN_IN_REDIRECT_URI=https://reading-test.localhost:8081/api/auth/callback/central-identity -e OIDC_RECOVERY_REDIRECT_URI=https://reading-test.localhost:8081/api/identity-recovery/callback auth bun run retarget:oauth-client reading

@@ -32,12 +32,17 @@ never run `down -v` or reseed them just to test SSO.
 | Read in Peace | Nest on `:3000`, Nuxt on `:3001` | `https://reading.localhost:8080` |
 
 Caddy serves these `.localhost` origins through the loopback-only gateway on
-`:8080`. `.localhost` usually resolves to loopback, but WSL's Linux resolver
-and the Windows browser may resolve it differently. Check in the actual
-browser; do not add public DNS or expose the gateway. Caddy routes portal pages
-to `web` and protocol, metadata, and health paths to `auth`. On WSL, Central's
-`dev` script finds the host address for sibling-app proxies; install `iproute2`
-and `jq` if missing.
+`:8080`. If WSL or Windows does not resolve them to loopback, add the host
+mappings and verify them in both environments using the
+[local host resolution instructions](../README.md#local-host-resolution). Do
+not add public DNS or expose the gateway. Caddy routes portal pages to `web`
+and protocol, metadata, and health paths to `auth`. On WSL, Central's `dev`
+script finds the host address for sibling-app proxies; install `iproute2` and
+`jq` if missing.
+If Caddy times out proxying host apps, compare WSL's address from `ip -4 addr`
+with the app project's Docker network subnet (`docker network inspect <network>`).
+If they overlap, configure a nonoverlapping subnet for that Compose project or
+Docker's default address pools before starting services. Preserve existing volumes.
 
 ## 1. Register external providers and configure Central
 
@@ -249,6 +254,7 @@ uses these entry points:
    printf '\n'
    export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
    BIDDING_OIDC_TEST_ORIGIN=https://bidding.localhost:8080 \
+     READING_OIDC_TEST_ORIGIN=https://reading.localhost:8080 \
      CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.localhost:8080 \
      bun scripts/test-oidc-browser.ts
    unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
