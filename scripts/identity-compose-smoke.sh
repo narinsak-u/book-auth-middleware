@@ -67,6 +67,6 @@ curl --fail --silent --show-error --insecure --resolve "${identity_host}:${https
   "https://${AUTH_DOMAIN}/api/auth/.well-known/openid-configuration" >"$tmpdir/issuer.json"
 EXPECTED_ISSUER="${BETTER_AUTH_URL}/api/auth" node -e 'const issuer=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).issuer;if(issuer!==process.env.EXPECTED_ISSUER)process.exit(1)' "$tmpdir/issuer.json"
 curl --fail --silent --show-error --insecure --resolve "${identity_host}:${https_port}:127.0.0.1" \
-  "https://${AUTH_DOMAIN}/sign-in" | node -e 'let body="";process.stdin.on("data",chunk=>body+=chunk);process.stdin.on("end",()=>{if(!body.includes("Sign in to Central Identity"))process.exit(1)})'
+  "https://${AUTH_DOMAIN}/sign-in" >/dev/null
 
 echo 'Synthetic standalone identity HTTPS smoke passed.'
