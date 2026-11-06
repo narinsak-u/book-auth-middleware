@@ -295,7 +295,15 @@ bunx dotenvx run --strict --overload -f .env.development -- docker compose --env
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null run --rm --no-deps auth bun run provision:bidding
 ```
 
-The command prints a one-time client ID and secret plus both registered callbacks. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. The provider loads its ID into the trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled.
+The command prints a one-time client ID and secret plus both registered callbacks. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled. Each authorization and token request checks the persisted client record, so disabling takes effect without restarting the provider.
+
+Disable one client by its ID with the operator CLI:
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null run --rm --no-deps auth bun run disable:client '<client-id>'
+```
+
+The command retains the client record and credentials. It blocks new authorization and token exchange for that client, without ending Application Sessions, revoking issued tokens, or affecting other clients.
 
 Start the provider and TLS proxy:
 

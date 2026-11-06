@@ -19,6 +19,9 @@ const relyingPartyClientSecret = process.env.TEST_RP_CLIENT_SECRET;
 const testUserEmail = process.env.CENTRAL_IDENTITY_TEST_EMAIL;
 const testUserPassword = process.env.CENTRAL_IDENTITY_TEST_PASSWORD;
 const unapprovedClientId = process.env.TEST_OIDC_UNAPPROVED_CLIENT_ID;
+const disableClientId = process.env.TEST_DISABLE_RP_CLIENT_ID;
+const disableClientSecret = process.env.TEST_DISABLE_RP_CLIENT_SECRET;
+const disableRedirectUri = process.env.TEST_DISABLE_RP_REDIRECT_URI;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
@@ -229,6 +232,102 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
       expect(user.email).toBe(signedInUser.email);
     },
   );
+  test.skipIf(
+    !disableClientId || !disableClientSecret || !disableRedirectUri ||
+    !relyingPartyClientId || !relyingPartyRedirectUri || !relyingPartyClientSecret ||
+    !testUserEmail || !testUserPassword,
+  )("disabling one client rejects old and new OIDC requests without ending the Central SSO Session or affecting another client", async () => {
+    const signIn = await authPost("sign-in/email", { email: testUserEmail!, password: testUserPassword! });
+    expect(signIn.status).toBe(200);
+    const sessionCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
+    expect(sessionCookie).toContain("session_token=");
+    const verifier = crypto.randomUUID() + crypto.randomUUID();
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+    ))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
+    const authorize = async (clientId: string, redirectUri: string) => {
+      const url = new URL(`${provider}/api/auth/oauth2/authorize`);
+      url.search = new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope: "openid email profile",
+        state: crypto.randomUUID(),
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      }).toString();
+      return fetch(url, { headers: { cookie: sessionCookie!, origin: provider! }, redirect: "manual" });
+    };
+    const unknownDisable = Bun.spawn(["bun", `${import.meta.dir}/disable-client.ts`, `unknown-${crypto.randomUUID()}`], {
+      cwd: import.meta.dir,
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    expect(await unknownDisable.exited).not.toBe(0);
+    const beforeDisable = await authorize(disableClientId!, disableRedirectUri!);
+    expect(beforeDisable.status).toBeGreaterThanOrEqual(300);
+    expect(beforeDisable.status).toBeLessThan(400);
+    const pendingCode = new URL(beforeDisable.headers.get("location")!).searchParams.get("code");
+    expect(pendingCode).toBeTruthy();
+
+    const disabled = Bun.spawn(["bun", `${import.meta.dir}/disable-client.ts`, disableClientId!], {
+      cwd: import.meta.dir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode] = await Promise.all([
+      disabled.exited,
+      new Response(disabled.stdout).text(),
+      new Response(disabled.stderr).text(),
+    ]);
+    expect(exitCode).toBe(0);
+
+    const token = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${encodeURIComponent(disableClientId!)}:${encodeURIComponent(disableClientSecret!)}`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: pendingCode!,
+        redirect_uri: disableRedirectUri!,
+        code_verifier: verifier,
+      }),
+    });
+    expect(token.status).toBeGreaterThanOrEqual(400);
+    expect(await token.text()).toContain("not approved");
+
+    const afterDisable = await authorize(disableClientId!, disableRedirectUri!);
+    expect(afterDisable.status).toBeGreaterThanOrEqual(400);
+    expect(await afterDisable.text()).toContain("not approved");
+    const session = await fetch(`${provider}/api/auth/get-session`, { headers: { cookie: sessionCookie! } });
+    expect(session.status).toBe(200);
+    expect((await session.json()).user).toBeTruthy();
+
+    const otherAuthorization = await authorize(relyingPartyClientId!, relyingPartyRedirectUri!);
+    expect(otherAuthorization.status).toBeGreaterThanOrEqual(300);
+    expect(otherAuthorization.status).toBeLessThan(400);
+    const otherCallback = new URL(otherAuthorization.headers.get("location")!);
+    expect(otherCallback.searchParams.get("code")).toBeTruthy();
+    expect(otherCallback.searchParams.get("error")).toBeNull();
+    const otherToken = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${encodeURIComponent(relyingPartyClientId!)}:${encodeURIComponent(relyingPartyClientSecret!)}`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: otherCallback.searchParams.get("code")!,
+        redirect_uri: relyingPartyRedirectUri!,
+        code_verifier: verifier,
+      }),
+    });
+    expect(otherToken.status).toBe(200);
+    expect((await otherToken.json()).access_token).toBeTruthy();
+  });
 
   test("rejects malformed Basic token credentials as an authentication error", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
