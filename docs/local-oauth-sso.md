@@ -94,6 +94,37 @@ both registered callbacks already match; otherwise provision replacements
 rather than resetting a database. No user can register a client through the
 public HTTP API.
 
+To retarget an existing client without rotating credentials, back up the Central
+Identity database first. For local development:
+
+```sh
+umask 077
+docker compose --env-file /dev/null exec -T db \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > central-before-oauth-retarget.dump
+pg_restore --list central-before-oauth-retarget.dump >/dev/null
+```
+
+The dump reads its password from the database container environment; `umask 077`
+keeps the backup owner-only.
+
+This is a single-issuer cutover: old issuer and application origins are not
+promised to keep working. From `book-auth-middleware/`, set the exact new
+callback pair and pass it to the running Central Identity container:
+
+```sh
+OIDC_SIGN_IN_REDIRECT_URI=https://new-app.example/api/auth/callback/central-identity \
+OIDC_RECOVERY_REDIRECT_URI=https://new-app.example/api/identity-recovery/callback \
+docker compose --env-file /dev/null exec -T \
+  -e OIDC_SIGN_IN_REDIRECT_URI -e OIDC_RECOVERY_REDIRECT_URI auth \
+  bun run retarget:oauth-client bidding
+```
+
+Use `reading` instead of `bidding` for Read in Peace. The command updates only
+the callback list on the existing detached client. It prints neither client ID
+nor secret. A real browser sign-in and recovery check at the new hosts is a
+later cutover gate; this callback-list update alone does not prove either flow.
+
 Decrypt, edit, and re-encrypt each affected environment:
 
 | Encrypted file | Set or check |

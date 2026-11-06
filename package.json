@@ -27,6 +27,7 @@
     "db:migrate": "bun run --filter @central-identity/db db:migrate",
     "provision:bidding": "bun run --filter @central-identity/server provision:bidding",
     "provision:reading": "bun run --filter @central-identity/server provision:reading",
+    "retarget:oauth-client": "bun run --filter @central-identity/server retarget:oauth-client",
     "disable:central-identity": "bun run --filter @central-identity/server disable:central-identity",
     "recover:identity": "bun run --filter @central-identity/server recover-identity",
     "prepare": "husky"
