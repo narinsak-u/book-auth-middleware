@@ -2,9 +2,9 @@
   auto_https disable_redirects
 }
 
-auth.127.0.0.1.nip.io:8080 {
+auth.localhost:8080 {
   tls internal
-  @identity path /api/auth/* /.well-known/* /oauth2/* /health/*
+  @identity path /api/auth /api/auth/* /.well-known/* /oauth2/* /health /health/*
   handle @identity {
     reverse_proxy auth:3000
   }
@@ -13,21 +13,13 @@ auth.127.0.0.1.nip.io:8080 {
   }
 }
 
-bidding.127.0.0.1.sslip.io:8080 {
+bidding.localhost:8080 {
   tls internal
-  reverse_proxy host.docker.internal:5173 {
-    transport http {
-      max_conns_per_host 4
-    }
-  }
+  reverse_proxy host.docker.internal:5173
 }
 
-reading.lvh.me:8080 {
+reading.localhost:8080 {
   tls internal
-  reverse_proxy host.docker.internal:3001 {
-    transport http {
-      max_conns_per_host 4
-    }
-  }
+  reverse_proxy host.docker.internal:3001
 }
 
