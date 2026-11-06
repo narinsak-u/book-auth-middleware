@@ -10,7 +10,7 @@ never run `down -v` or reseed them just to test SSO.
 
 1. Book Bidding or Read in Peace starts OIDC from its own Sign In entry point.
    The browser reaches Central Identity at
-   `https://auth.127.0.0.1.nip.io:8080/api/auth`.
+   `https://auth.localhost:8080/api/auth`.
 2. Central Identity accepts username or email and password. New credential
    identities verify email before sign-in. Google and GitHub require separate
    operator-owned provider registrations and are not part of the verified
@@ -27,22 +27,30 @@ never run `down -v` or reseed them just to test SSO.
 
 | Service | Development process | Public HTTPS origin |
 | --- | --- | --- |
-| Central Identity | Auth and portal in Compose | `https://auth.127.0.0.1.nip.io:8080` |
-| Book Bidding | SvelteKit on `:5173` | `https://bidding.127.0.0.1.sslip.io:8080` |
-| Read in Peace | Nest on `:3000`, Nuxt on `:3001` | `https://reading.lvh.me:8080` |
+| Central Identity | Auth and portal in Compose | `https://auth.localhost:8080` |
+| Book Bidding | SvelteKit on `:5173` | `https://bidding.localhost:8080` |
+| Read in Peace | Nest on `:3000`, Nuxt on `:3001` | `https://reading.localhost:8080` |
 
-Caddy provides all three public origins on `:8080`. Its Central auth and portal
-processes use separate container-internal ports. On WSL, Central's `dev` script
-finds the host address for Caddy's sibling-app proxies; install `iproute2` and
+Caddy serves these `.localhost` origins through the loopback-only gateway on
+`:8080`. If WSL or Windows does not resolve them to loopback, add the host
+mappings and verify them in both environments using the
+[local host resolution instructions](../README.md#local-host-resolution). Do
+not add public DNS or expose the gateway. Caddy routes portal pages to `web`
+and protocol, metadata, and health paths to `auth`. On WSL, Central's `dev`
+script finds the host address for sibling-app proxies; install `iproute2` and
 `jq` if missing.
+If Caddy times out proxying host apps, compare WSL's address from `ip -4 addr`
+with the app project's Docker network subnet (`docker network inspect <network>`).
+If they overlap, configure a nonoverlapping subnet for that Compose project or
+Docker's default address pools before starting services. Preserve existing volumes.
 
 ## 1. Register external providers and configure Central
 
 Create **development-only** Google and GitHub OAuth registrations. Configure
 their exact authorized callback URLs:
 
-- Google: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/google`
-- GitHub: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/github`
+- Google: `https://auth.localhost:8080/api/auth/callback/google`
+- GitHub: `https://auth.localhost:8080/api/auth/callback/github`
 
 Grant GitHub `read:user` and `user:email`; private GitHub email must be returned
 as verified. Add your Google test account to the OAuth consent screen's test
@@ -81,27 +89,61 @@ Each command prints a one-time client ID and secret. Capture each privately:
 Book Bidding and Read in Peace need **different** credentials. Each client
 registers both exact HTTPS callbacks:
 
-- Bidding sign-in: `https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`
-- Bidding recovery: `https://bidding.127.0.0.1.sslip.io:8080/api/identity-recovery/callback`
-- Reading sign-in: `https://reading.lvh.me:8080/api/auth/callback/central-identity`
-- Reading recovery: `https://reading.lvh.me:8080/api/identity-recovery/callback`
+- Bidding sign-in: `https://bidding.localhost:8080/api/auth/callback/central-identity`
+- Bidding recovery: `https://bidding.localhost:8080/api/identity-recovery/callback`
+- Reading sign-in: `https://reading.localhost:8080/api/auth/callback/central-identity`
+- Reading recovery: `https://reading.localhost:8080/api/identity-recovery/callback`
 
 Provisioning rejects non-HTTPS callbacks, query/hash/userinfo, wrong paths, or
 callbacks on different origins. Production provisioning requires exact
 `BIDDING_RECOVERY_OIDC_REDIRECT_URI` and `READING_RECOVERY_OIDC_REDIRECT_URI`
-values matching each application's recovery callback. Skip reprovisioning if
-both registered callbacks already match; otherwise provision replacements
-rather than resetting a database. No user can register a client through the
-public HTTP API.
+values matching each application's recovery callback. No user can register a
+client through the public HTTP API.
+
+Before retargeting existing clients, back up the Central Identity database and
+verify the dump. Retarget each existing client with its matching callback pair;
+do not provision replacements, rotate client IDs/secrets, or remove volumes.
+Also update operator-owned Google/GitHub registrations to the exact Central
+callbacks above. If Reviewed Recovery uses separate Google/GitHub registrations,
+set those registrations to their corresponding new Central callback URLs too.
+External provider sign-in and recovery are not verified by this cutover.
+
+```sh
+umask 077
+docker compose --env-file /dev/null exec -T db \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > central-before-oauth-retarget.dump
+pg_restore --list central-before-oauth-retarget.dump >/dev/null
+```
+
+The dump reads its password from the database container environment; `umask 077`
+keeps the backup owner-only.
+
+This is a single-issuer cutover: old issuer and application origins are not
+promised to keep working. Existing host-only sessions and emailed verification
+or reset links are not portable; sign in again and request fresh links. From
+`book-auth-middleware/`, set the exact new callback pair and pass it to the
+running Central Identity container:
+
+```sh
+OIDC_SIGN_IN_REDIRECT_URI=https://bidding.localhost:8080/api/auth/callback/central-identity \
+OIDC_RECOVERY_REDIRECT_URI=https://bidding.localhost:8080/api/identity-recovery/callback \
+docker compose --env-file /dev/null exec -T \
+  -e OIDC_SIGN_IN_REDIRECT_URI -e OIDC_RECOVERY_REDIRECT_URI auth \
+  bun run retarget:oauth-client bidding
+```
+
+Use `reading.localhost:8080` and `reading` instead for Read in Peace.
 
 Decrypt, edit, and re-encrypt each affected environment:
 
 | Encrypted file | Set or check |
 | --- | --- |
 | Central `.env.development` | `BIDDING_OIDC_CLIENT_ID`, `READING_OIDC_CLIENT_ID` |
-| Bidding `.env.development` | `CENTRAL_OIDC_CLIENT_ID`, `CENTRAL_OIDC_CLIENT_SECRET`, `CENTRAL_OIDC_ISSUER=https://auth.127.0.0.1.nip.io:8080/api/auth`, app origin on `:8080` |
-| Reading `backend/.env.development` | `CENTRAL_IDENTITY_CLIENT_ID`, `CENTRAL_IDENTITY_CLIENT_SECRET`, `CENTRAL_IDENTITY_ISSUER=https://auth.127.0.0.1.nip.io:8080/api/auth`, public app origin on `:8080` |
+| Bidding `.env.development` | `CENTRAL_OIDC_CLIENT_ID`, `CENTRAL_OIDC_CLIENT_SECRET`, `CENTRAL_OIDC_ISSUER=https://auth.localhost:8080/api/auth`, app origin on `:8080` |
+| Reading `backend/.env.development` | `CENTRAL_IDENTITY_CLIENT_ID`, `CENTRAL_IDENTITY_CLIENT_SECRET`, `CENTRAL_IDENTITY_ISSUER=https://auth.localhost:8080/api/auth`, public app origin on `:8080` |
 | Reading `frontend/.env.development` | Public site and Central URLs on `:8080`, backend URL `http://localhost:3000`; never place secrets here |
+
 
 Use `bun run env:decrypt` / `bun run env:encrypt` in Central and Bidding.
 From the Reading root, use `npm run env:decrypt` / `npm run env:encrypt` to
@@ -123,6 +165,10 @@ sudo update-ca-certificates
 
 Import that root certificate into the browser's trust store if it differs from
 the Linux trust store (for example, Windows Chrome when Caddy runs under WSL).
+Under WSL, Windows browser trust and Linux Node trust are separate. Export the
+public Caddy root, copy it to a Windows-visible path, then import it into the
+intended current-user Windows Root store. Never copy the private CA key.
+
 Never export or share Caddy's private CA key. Use an **absolute** CA path for
 Node processes started from the Reading subpackages.
 
@@ -181,15 +227,15 @@ use their public HTTPS origins so callback URLs and cookies match.
 Use a browser that trusts Caddy's local root CA. The verified development flow
 uses these entry points:
 
-1. Open `https://bidding.127.0.0.1.sslip.io:8080` and select **Sign In** in
-   the header. Complete credential sign-in or registration at Central Identity.
-   Confirm the browser returns to `/dashboard` and
-   `/api/auth/get-session` reports an authenticated Application Session.
-2. In the same browser profile, open
-   `https://reading.lvh.me:8080/dashboard` and select **Sign In** if redirected
-   there. Confirm Central Identity reuses its existing SSO Session without
-   prompting for credentials, then confirm Read in Peace has its own
+1. Open `https://bidding.localhost:8080` and select **Sign In** in the header.
+   Complete credential sign-in or registration at Central Identity. Confirm
+   the browser returns to `/dashboard` and `/api/auth/get-session` reports an
    authenticated Application Session.
+2. In the same browser profile, open `https://reading.localhost:8080/dashboard`
+   and select **Sign In** if redirected there. Confirm Central Identity reuses
+   its existing SSO Session without prompting for credentials, then confirm
+   Read in Peace has its own authenticated Application Session.
+
 3. Sign out locally in one application and confirm only that Application
    Session ends. End the Central SSO Session and do not expect it to revoke
    either application's existing Application Session. A new authorization
@@ -207,8 +253,9 @@ uses these entry points:
    read -r -s -p "Central Identity test password: " CENTRAL_IDENTITY_TEST_PASSWORD
    printf '\n'
    export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
-   BIDDING_OIDC_TEST_ORIGIN=https://bidding.127.0.0.1.sslip.io:8080 \
-     CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.127.0.0.1.nip.io:8080 \
+   BIDDING_OIDC_TEST_ORIGIN=https://bidding.localhost:8080 \
+     READING_OIDC_TEST_ORIGIN=https://reading.localhost:8080 \
+     CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.localhost:8080 \
      bun scripts/test-oidc-browser.ts
    unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
    ```
@@ -236,7 +283,7 @@ From `book-auth-middleware/` while its HTTPS gateway is running:
 bun run typecheck
 bun run test
 bun run test:env
-NODE_EXTRA_CA_CERTS="$(realpath central-identity-root.crt)" TEST_PROVIDER_URL=https://auth.127.0.0.1.nip.io:8080 TEST_MAILPIT_URL=http://localhost:8025 bun run --filter @central-identity/server test:integration
+NODE_EXTRA_CA_CERTS="$(realpath central-identity-root.crt)" TEST_PROVIDER_URL=https://auth.localhost:8080 TEST_MAILPIT_URL=http://localhost:8025 bun run --filter @central-identity/server test:integration
 ```
 
 From `book-bidding/`, run `bun run check && bun run test`.

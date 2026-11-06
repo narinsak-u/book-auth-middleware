@@ -5,8 +5,8 @@ const production = process.env.NODE_ENV === "production" && !testProduction;
 const origin = production
   ? undefined
   : testProduction
-    ? "https://reading-test.lvh.me:8081"
-    : "https://reading.lvh.me:8080";
+    ? "https://reading-test.localhost:8081"
+    : "https://reading.localhost:8080"
 const redirectURI = process.env.READING_OIDC_REDIRECT_URI ?? (origin && `${origin}/api/auth/callback/central-identity`);
 const recoveryRedirectURI = process.env.READING_RECOVERY_OIDC_REDIRECT_URI ?? (origin && `${origin}/api/identity-recovery/callback`);
 if (!redirectURI || !recoveryRedirectURI) {

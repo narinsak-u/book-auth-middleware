@@ -4,6 +4,17 @@ const provider = process.env.TEST_PROVIDER_URL;
 const mailpit = process.env.TEST_MAILPIT_URL;
 const relyingPartyClientId = process.env.TEST_RP_CLIENT_ID;
 const relyingPartyRedirectUri = process.env.TEST_RP_REDIRECT_URI;
+const retargetProvider = process.env.TEST_RETARGET_PROVIDER_URL;
+const retargetDatabase = process.env.TEST_RETARGET_DATABASE_URL;
+const retargetTarget = process.env.TEST_RETARGET_TARGET;
+const retargetClientId = process.env.TEST_RETARGET_CLIENT_ID;
+const retargetClientSecret = process.env.TEST_RETARGET_CLIENT_SECRET;
+const oldSignInRedirect = process.env.TEST_RETARGET_OLD_SIGN_IN_REDIRECT_URI;
+const oldRecoveryRedirect = process.env.TEST_RETARGET_OLD_RECOVERY_REDIRECT_URI;
+const canTestRetarget = Boolean(
+  retargetProvider && retargetDatabase && retargetTarget && retargetClientId &&
+  retargetClientSecret && oldSignInRedirect && oldRecoveryRedirect,
+);
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
@@ -165,4 +176,87 @@ async function authPost(path: string, body: object) {
     expect((await discovery.json()).issuer).toBe(`${provider}/api/auth`);
     expect((await fetch(`${provider}/health/ready`)).status).toBe(200);
   });
+});
+describe.skipIf(!canTestRetarget)("OAuth client retarget integration", () => {
+  test(
+    "retargets a disposable OAuth client through the CLI and public callback behavior",
+    async () => {
+      if (retargetDatabase === process.env.DATABASE_URL) {
+        throw new Error("TEST_RETARGET_DATABASE_URL must be separate from DATABASE_URL");
+      }
+      if (retargetTarget !== "bidding" && retargetTarget !== "reading") {
+        throw new Error("TEST_RETARGET_TARGET must be bidding or reading");
+      }
+      const clientIdVariable = retargetTarget === "bidding"
+        ? "BIDDING_OIDC_CLIENT_ID"
+        : "READING_OIDC_CLIENT_ID";
+      const checkDestination = async (redirectUri: string) => {
+        const query = new URLSearchParams({ client_id: retargetClientId!, redirect_uri: redirectUri });
+        return fetch(`${retargetProvider}/api/auth/relying-party-destination?${query}`);
+      };
+      const runRetarget = (signIn: string, recovery: string) => Bun.spawnSync({
+        cmd: ["bun", "src/retarget-oauth-client.ts", retargetTarget!],
+        cwd: `${import.meta.dir}/..`,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          DATABASE_URL: retargetDatabase!,
+          [clientIdVariable]: retargetClientId!,
+          OIDC_SIGN_IN_REDIRECT_URI: signIn,
+          OIDC_RECOVERY_REDIRECT_URI: recovery,
+        },
+      });
+      const newOrigin = `https://retarget-${crypto.randomUUID()}.example.test`;
+      const newSignIn = `${newOrigin}/api/auth/callback/central-identity`;
+      const newRecovery = `${newOrigin}/api/identity-recovery/callback`;
+      let retargeted = false;
+
+      try {
+        const updated = runRetarget(newSignIn, newRecovery);
+        expect(updated.exitCode).toBe(0);
+        retargeted = true;
+
+        for (const redirectUri of [newSignIn, newRecovery]) {
+          const accepted = await checkDestination(redirectUri);
+          expect(accepted.status).toBe(200);
+          expect(await accepted.json()).toEqual({ destination: newOrigin });
+        }
+        const discovery = await fetch(`${retargetProvider}/api/auth/.well-known/openid-configuration`);
+        const { token_endpoint: tokenEndpoint } = await discovery.json() as { token_endpoint: string };
+        const authenticatedWithoutCode = await fetch(tokenEndpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Basic ${btoa(`${encodeURIComponent(retargetClientId!)}:${encodeURIComponent(retargetClientSecret!)}`)}`,
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code: "invalid-retarget-test-code",
+            redirect_uri: newSignIn,
+          }),
+        });
+        expect(authenticatedWithoutCode.status).toBe(400);
+        expect(await authenticatedWithoutCode.json()).toMatchObject({ error: "invalid_grant" });
+        for (const redirectUri of [oldSignInRedirect!, oldRecoveryRedirect!]) {
+          const rejected = await checkDestination(redirectUri);
+          expect(rejected.status).toBe(400);
+          expect(await rejected.json()).toEqual({ destination: null });
+        }
+
+        const invalid = runRetarget(
+          `${newOrigin}/api/auth/callback/central-identity`,
+          "https://other.example.test/api/identity-recovery/callback",
+        );
+        expect(invalid.exitCode).not.toBe(0);
+        const unchanged = await checkDestination(newSignIn);
+        expect(unchanged.status).toBe(200);
+        expect(await unchanged.json()).toEqual({ destination: newOrigin });
+      } finally {
+        if (retargeted) {
+          expect(runRetarget(oldSignInRedirect!, oldRecoveryRedirect!).exitCode).toBe(0);
+        }
+      }
+    },
+  );
 });
