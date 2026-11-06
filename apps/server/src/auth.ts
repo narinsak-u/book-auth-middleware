@@ -1,3 +1,4 @@
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { createHash } from "node:crypto";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -32,8 +33,6 @@ const googleClientId = oauthEnabled ? required("GOOGLE_CLIENT_ID") : undefined;
 const googleClientSecret = oauthEnabled ? required("GOOGLE_CLIENT_SECRET") : undefined;
 const githubClientId = oauthEnabled ? required("GITHUB_CLIENT_ID") : undefined;
 const githubClientSecret = oauthEnabled ? required("GITHUB_CLIENT_SECRET") : undefined;
-const biddingClientId = process.env.BIDDING_OIDC_CLIENT_ID;
-const readingClientId = process.env.READING_OIDC_CLIENT_ID;
 const smtpPort = Number(required("SMTP_PORT"));
 if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
   throw new Error("SMTP_PORT must be a valid TCP port");
@@ -141,13 +140,56 @@ export const auth = betterAuth({
   },
   plugins: [
     jwt(),
+    {
+      id: "approved-oauth-clients",
+      hooks: {
+        before: [{
+          matcher: ({ path }) => path === "/oauth2/authorize" || path === "/oauth2/token",
+          handler: createAuthMiddleware(async (ctx) => {
+            const authorization = ctx.headers?.get("authorization");
+            let basicClientId: string | undefined;
+            if (authorization?.split(/\s+/, 1)[0].toLowerCase() === "basic") {
+              try {
+                const encodedCredentials = authorization.match(/^Basic\s+([A-Za-z0-9+/]+={0,2})$/i)?.[1];
+                if (!encodedCredentials) throw new Error("Invalid Basic credentials");
+                const credentials = atob(encodedCredentials);
+                const separator = credentials.indexOf(":");
+                if (separator < 0) throw new Error("Invalid Basic credentials");
+                basicClientId = new URLSearchParams(`client_id=${credentials.slice(0, separator)}`).get("client_id") || undefined;
+                if (!basicClientId) throw new Error("Invalid Basic credentials");
+              } catch {
+                throw new APIError("UNAUTHORIZED", { message: "OAuth client credentials are invalid" });
+              }
+            }
+            const isTokenRequest = ctx.path === "/oauth2/token";
+            const formClientId = isTokenRequest ? ctx.body?.client_id : undefined;
+            if (basicClientId && formClientId !== undefined && formClientId !== basicClientId) {
+              throw new APIError("UNAUTHORIZED", { message: "OAuth client credentials are invalid" });
+            }
+            const clientId = isTokenRequest
+              ? basicClientId ?? formClientId
+              : ctx.query?.client_id ?? ctx.body?.client_id ?? basicClientId;
+            if (typeof clientId !== "string") return;
+            const client = await ctx.context.adapter.findOne<{
+              disabled: boolean | null;
+              skipConsent: boolean | null;
+            }>({
+              model: "oauthClient",
+              where: [{ field: "clientId", value: clientId }],
+            });
+            if (!client || client.disabled || client.skipConsent !== true) {
+              throw new APIError("UNAUTHORIZED", { message: "OAuth client is not approved" });
+            }
+          }),
+        }],
+      },
+    },
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
-      cachedTrustedClients: new Set([biddingClientId, readingClientId].filter((id): id is string => Boolean(id))),
       clientPrivileges: async ({ action }) =>
-        action === "create" && process.env.BIDDING_OIDC_PROVISIONING === "true",
+        action === "create" && process.env.OIDC_CLIENT_PROVISIONING === "true",
     }),
     username({
       minUsernameLength: 3,

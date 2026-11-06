@@ -15,6 +15,10 @@ const canTestRetarget = Boolean(
   retargetProvider && retargetDatabase && retargetTarget && retargetClientId &&
   retargetClientSecret && oldSignInRedirect && oldRecoveryRedirect,
 );
+const relyingPartyClientSecret = process.env.TEST_RP_CLIENT_SECRET;
+const testUserEmail = process.env.CENTRAL_IDENTITY_TEST_EMAIL;
+const testUserPassword = process.env.CENTRAL_IDENTITY_TEST_PASSWORD;
+const unapprovedClientId = process.env.TEST_OIDC_UNAPPROVED_CLIENT_ID;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
@@ -82,6 +86,164 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
     });
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
+  test("rejects unknown OAuth clients at public authorization and token endpoints", async () => {
+    const clientId = `unknown-${crypto.randomUUID()}`;
+    const authorize = new URL(`${provider}/api/auth/oauth2/authorize`);
+    authorize.search = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: "https://unknown.example.test/callback",
+      scope: "openid",
+      state: crypto.randomUUID(),
+      code_challenge: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      code_challenge_method: "S256",
+    }).toString();
+    const authorizationResponse = await fetch(authorize, { redirect: "manual" });
+    expect(authorizationResponse.status).toBeGreaterThanOrEqual(400);
+    expect(await authorizationResponse.text()).toContain("not approved");
+
+    const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
+    const token = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${clientId}:unknown-secret`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "unknown-client-test-code",
+        redirect_uri: "https://unknown.example.test/callback",
+      }),
+    });
+    expect(token.status).toBeGreaterThanOrEqual(400);
+    expect(await token.text()).toContain("not approved");
+  });
+
+  test.skipIf(!unapprovedClientId)("rejects unapproved OAuth clients at public authorization and token endpoints", async () => {
+    const authorize = new URL(`${provider}/api/auth/oauth2/authorize`);
+    authorize.search = new URLSearchParams({
+      response_type: "code",
+      client_id: unapprovedClientId!,
+      redirect_uri: "https://unapproved.example.test/callback",
+      scope: "openid",
+      state: crypto.randomUUID(),
+      code_challenge: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      code_challenge_method: "S256",
+    }).toString();
+    const authorizationResponse = await fetch(authorize, { redirect: "manual" });
+    expect(authorizationResponse.status).toBeGreaterThanOrEqual(400);
+    expect(await authorizationResponse.text()).toContain("not approved");
+
+    const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
+    const token = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: unapprovedClientId!,
+        code: "unapproved-client-test-code",
+        redirect_uri: "https://unapproved.example.test/callback",
+      }),
+    });
+    expect(token.status).toBeGreaterThanOrEqual(400);
+    expect(await token.text()).toContain("not approved");
+  });
+
+  test.skipIf(
+    !relyingPartyClientId || !relyingPartyRedirectUri || !relyingPartyClientSecret ||
+    !testUserEmail || !testUserPassword,
+  )(
+    "completes approved OAuth authorization and Basic token exchange without consent",
+    async () => {
+      const signIn = await authPost("sign-in/email", { email: testUserEmail!, password: testUserPassword! });
+      expect(signIn.status).toBe(200);
+      const signedInUser = (await signIn.json()).user;
+      const sessionCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
+      expect(sessionCookie).toContain("session_token=");
+
+      const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
+      const codeVerifier = btoa(String.fromCharCode(...verifierBytes))
+        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const challengeBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier)));
+      const codeChallenge = btoa(String.fromCharCode(...challengeBytes))
+        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const state = crypto.randomUUID();
+      const authorize = new URL(`${provider}/api/auth/oauth2/authorize`);
+      authorize.search = new URLSearchParams({
+        response_type: "code",
+        client_id: relyingPartyClientId!,
+        redirect_uri: relyingPartyRedirectUri!,
+        scope: "openid email profile",
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+      }).toString();
+      const authorization = await fetch(authorize, {
+        headers: { cookie: sessionCookie!, origin: provider! },
+        redirect: "manual",
+      });
+      expect(authorization.status).toBeGreaterThanOrEqual(300);
+      expect(authorization.status).toBeLessThan(400);
+      const callback = new URL(authorization.headers.get("location")!);
+      expect(`${callback.origin}${callback.pathname}`).toBe(relyingPartyRedirectUri!);
+      expect(callback.searchParams.get("state")).toBe(state);
+      expect(callback.searchParams.get("error")).toBeNull();
+      expect(callback.searchParams.get("code")).toBeTruthy();
+      expect(callback.href).not.toContain("/oauth/consent");
+
+      const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
+      const token = await fetch(discovery.token_endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Basic ${btoa(`${encodeURIComponent(relyingPartyClientId!)}:${encodeURIComponent(relyingPartyClientSecret!)}`)}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: callback.searchParams.get("code")!,
+          redirect_uri: relyingPartyRedirectUri!,
+          code_verifier: codeVerifier,
+        }),
+      });
+      expect(token.status).toBe(200);
+      const tokenResponse = await token.json();
+      const idToken = tokenResponse.id_token as string;
+      expect(typeof idToken).toBe("string");
+      const idTokenPayload = idToken.split(".")[1];
+      if (!idTokenPayload) throw new Error("OIDC token response had no ID token payload");
+      const payload = JSON.parse(atob(idTokenPayload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+        aud: string | string[];
+        iss: string;
+        sub: string;
+      };
+      expect(payload.iss).toBe(discovery.issuer);
+      expect(Array.isArray(payload.aud) ? payload.aud : [payload.aud]).toContain(relyingPartyClientId!);
+      expect(payload.sub).toBe(signedInUser.id);
+
+      const userinfo = await fetch(discovery.userinfo_endpoint, {
+        headers: { authorization: `Bearer ${tokenResponse.access_token}` },
+      });
+      expect(userinfo.status).toBe(200);
+      const user = await userinfo.json();
+      expect(user.sub).toBe(signedInUser.id);
+      expect(user.email).toBe(signedInUser.email);
+    },
+  );
+
+  test("rejects malformed Basic token credentials as an authentication error", async () => {
+    const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`).then((response) => response.json());
+    const token = await fetch(discovery.token_endpoint, {
+      method: "POST",
+      headers: {
+        authorization: "Basic !!!",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ grant_type: "authorization_code", code: "malformed-basic-test" }),
+    });
+    expect(token.status).toBe(401);
+    expect(await token.text()).toContain("OAuth client credentials are invalid");
+  });
+
 
 async function authPost(path: string, body: object) {
   return fetch(`${provider}/api/auth/${path}`, {
