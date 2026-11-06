@@ -114,38 +114,57 @@ restore_dump "$reading_old" reading reading "$tmpdir/reading.dump"
 restore_dump "${project}-identity-restore" central central "$tmpdir/provider.dump"
 restore_dump "${project}-reading-restore" reading reading "$tmpdir/reading.dump"
 
+provider_user_sql='SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"'
+provider_client_sql='SELECT md5(string_agg(client_id || chr(58) || array_to_string(redirect_uris, chr(44)), chr(44) ORDER BY client_id)) FROM oauth_client'
+provider_session_sql='SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session'
+reading_user_sql='SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"'
+reading_content_sql='SELECT md5(string_agg(id || chr(58) || title, chr(44) ORDER BY id)) FROM books'
+reading_session_sql='SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session'
+account_links_sql='SELECT md5(string_agg(id || chr(58) || user_id || chr(58) || provider_id || chr(58) || account_id, chr(44) ORDER BY id)) FROM account'
+memberships_sql='SELECT md5(string_agg(id || chr(58) || user_id || chr(58) || plan || chr(58) || status || chr(58) || item_limit::text, chr(44) ORDER BY id)) FROM memberships'
+session_rows_sql='SELECT COALESCE(json_agg(json_build_array(id::text, md5(token || chr(58) || user_id || chr(58) || expires_at::text)) ORDER BY id), '\''[]'\''::json)::text FROM session'
+provider_account_count=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT count(*) FROM account')
+reading_account_count=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT count(*) FROM account')
+reading_membership_count=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT count(*) FROM memberships')
 provider_user_count=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT count(*) FROM "user"')
 provider_client_count=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT count(*) FROM oauth_client')
 reading_user_count=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT count(*) FROM "user"')
 reading_content_count=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT count(*) FROM books')
-provider_user_digest=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"')
-provider_client_digest=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT md5(string_agg(client_id || chr(58) || array_to_string(redirect_uris, chr(44)), chr(44) ORDER BY client_id)) FROM oauth_client')
-provider_session_digest=$(docker exec "$provider_old" psql -U central -d central -Atc 'SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session')
-reading_user_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"')
-reading_content_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || title, chr(44) ORDER BY id)) FROM books')
-reading_session_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session')
+provider_user_digest=$(docker exec "$provider_old" psql -U central -d central -Atc "$provider_user_sql")
+provider_client_digest=$(docker exec "$provider_old" psql -U central -d central -Atc "$provider_client_sql")
+provider_session_digest=$(docker exec "$provider_old" psql -U central -d central -Atc "$provider_session_sql")
+reading_user_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc "$reading_user_sql")
+reading_content_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc "$reading_content_sql")
+reading_session_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc "$reading_session_sql")
+provider_account_digest=$(docker exec "$provider_old" psql -U central -d central -Atc "$account_links_sql")
+reading_account_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc "$account_links_sql")
+reading_membership_digest=$(docker exec "$reading_old" psql -U reading -d reading -Atc "$memberships_sql")
 provider_sessions_snapshot="$tmpdir/provider-sessions.json"
 reading_sessions_snapshot="$tmpdir/reading-sessions.json"
 session_snapshot() {
-  docker exec "$1" psql -U "$2" -d "$3" -Atc 'SELECT COALESCE(json_agg(json_build_array(id::text, md5(token || chr(58) || user_id || chr(58) || expires_at::text)) ORDER BY id), '\''[]'\''::json)::text FROM session' >"$4"
+  docker exec "$1" psql -U "$2" -d "$3" -Atc "$session_rows_sql" >"$4"
 }
 session_rows_preserved() {
   local container=$1 user=$2 database=$3 snapshot=$4 current
-  current=$(docker exec "$container" psql -U "$user" -d "$database" -Atc 'SELECT COALESCE(json_agg(json_build_array(id::text, md5(token || chr(58) || user_id || chr(58) || expires_at::text)) ORDER BY id), '\''[]'\''::json)::text FROM session')
+  current=$(docker exec "$container" psql -U "$user" -d "$database" -Atc "$session_rows_sql")
   node -e 'const a=JSON.parse(require("node:fs").readFileSync(process.argv[1])),m=new Map(JSON.parse(process.argv[2]));if(a.some(([id,d])=>m.get(id)!==d))process.exit(1)' "$snapshot" "$current"
 }
 session_snapshot "$provider_old" central central "$provider_sessions_snapshot"
 session_snapshot "$reading_old" reading reading "$reading_sessions_snapshot"
 [[ $provider_user_count -gt 0 && $provider_client_count -gt 0 && $reading_user_count -gt 0 && $reading_content_count -gt 0 ]] || { echo 'Source backups must contain provider users, approved clients, Reading users, and Reading book content.' >&2; exit 1; }
+[[ $provider_account_count -gt 0 && $reading_account_count -gt 0 && $reading_membership_count -gt 0 ]] || { echo 'Synthetic sources must contain provider account links, Reading identity links, and Reading memberships.' >&2; exit 1; }
 for instance in "$provider_old" "${project}-identity-restore"; do
-  [[ $(docker exec "$instance" psql -U central -d central -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"') == "$provider_user_digest" ]]
-  [[ $(docker exec "$instance" psql -U central -d central -Atc 'SELECT md5(string_agg(client_id || chr(58) || array_to_string(redirect_uris, chr(44)), chr(44) ORDER BY client_id)) FROM oauth_client') == "$provider_client_digest" ]]
-  [[ $(docker exec "$instance" psql -U central -d central -Atc 'SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session') == "$provider_session_digest" ]]
+  [[ $(docker exec "$instance" psql -U central -d central -Atc "$provider_user_sql") == "$provider_user_digest" ]]
+  [[ $(docker exec "$instance" psql -U central -d central -Atc "$provider_client_sql") == "$provider_client_digest" ]]
+  [[ $(docker exec "$instance" psql -U central -d central -Atc "$account_links_sql") == "$provider_account_digest" ]]
+  [[ $(docker exec "$instance" psql -U central -d central -Atc "$provider_session_sql") == "$provider_session_digest" ]]
 done
 for instance in "$reading_old" "${project}-reading-restore"; do
-  [[ $(docker exec "$instance" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"') == "$reading_user_digest" ]]
-  [[ $(docker exec "$instance" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || title, chr(44) ORDER BY id)) FROM books') == "$reading_content_digest" ]]
-  [[ $(docker exec "$instance" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || token || chr(58) || user_id || chr(58) || expires_at::text, chr(44) ORDER BY id)) FROM session') == "$reading_session_digest" ]]
+  [[ $(docker exec "$instance" psql -U reading -d reading -Atc "$reading_user_sql") == "$reading_user_digest" ]]
+  [[ $(docker exec "$instance" psql -U reading -d reading -Atc "$reading_content_sql") == "$reading_content_digest" ]]
+  [[ $(docker exec "$instance" psql -U reading -d reading -Atc "$account_links_sql") == "$reading_account_digest" ]]
+  [[ $(docker exec "$instance" psql -U reading -d reading -Atc "$memberships_sql") == "$reading_membership_digest" ]]
+  [[ $(docker exec "$instance" psql -U reading -d reading -Atc "$reading_session_sql") == "$reading_session_digest" ]]
 done
 
 [[ $https_port == 15443 ]] || { echo 'Synthetic browser callbacks require CUTOVER_HTTPS_PORT=15443.' >&2; exit 1; }
@@ -372,16 +391,19 @@ done
 provider_db_container=$("${compose_provider[@]}" ps -q db)
 provider_mounted_volume=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' "$provider_db_container")
 [[ $provider_mounted_volume == "$provider_volume" ]] || { echo 'Independent provider Compose mounted a different volume.' >&2; exit 1; }
-docker exec "$provider_db_container" psql -U central -d central -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"' | grep -Fx "$provider_user_digest" >/dev/null
-docker exec "$provider_db_container" psql -U central -d central -Atc 'SELECT md5(string_agg(client_id || chr(58) || array_to_string(redirect_uris, chr(44)), chr(44) ORDER BY client_id)) FROM oauth_client' | grep -Fx "$provider_client_digest" >/dev/null
+docker exec "$provider_db_container" psql -U central -d central -Atc "$provider_user_sql" | grep -Fx "$provider_user_digest" >/dev/null
+docker exec "$provider_db_container" psql -U central -d central -Atc "$provider_client_sql" | grep -Fx "$provider_client_digest" >/dev/null
+docker exec "$provider_db_container" psql -U central -d central -Atc "$account_links_sql" | grep -Fx "$provider_account_digest" >/dev/null
 "${compose_reading[@]}" up -d db
 "${compose_reading[@]}" run --rm --no-deps backend npm exec -- drizzle-kit migrate
 "${compose_reading[@]}" up --build -d --wait
 reading_db_container=$("${compose_reading[@]}" ps -q db)
 reading_mounted_volume=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' "$reading_db_container")
 [[ $reading_mounted_volume == "$reading_volume" ]] || { echo 'Independent Reading Compose mounted a different volume.' >&2; exit 1; }
-docker exec "$reading_db_container" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || email, chr(44) ORDER BY id)) FROM "user"' | grep -Fx "$reading_user_digest" >/dev/null
-docker exec "$reading_db_container" psql -U reading -d reading -Atc 'SELECT md5(string_agg(id || chr(58) || title, chr(44) ORDER BY id)) FROM books' | grep -Fx "$reading_content_digest" >/dev/null
+docker exec "$reading_db_container" psql -U reading -d reading -Atc "$reading_user_sql" | grep -Fx "$reading_user_digest" >/dev/null
+docker exec "$reading_db_container" psql -U reading -d reading -Atc "$reading_content_sql" | grep -Fx "$reading_content_digest" >/dev/null
+docker exec "$reading_db_container" psql -U reading -d reading -Atc "$account_links_sql" | grep -Fx "$reading_account_digest" >/dev/null
+docker exec "$reading_db_container" psql -U reading -d reading -Atc "$memberships_sql" | grep -Fx "$reading_membership_digest" >/dev/null
 browser_proof neutral.Caddyfile "$new_ingress"
 session_rows_preserved "$provider_db_container" central central "$provider_sessions_snapshot"
 session_rows_preserved "$reading_db_container" reading reading "$reading_sessions_snapshot"
@@ -399,6 +421,13 @@ legacy_provider_db=$("${compose_legacy[@]}" ps -q db)
 legacy_reading_db=$("${compose_legacy[@]}" ps -q reading-db)
 session_rows_preserved "$legacy_provider_db" central central "$provider_sessions_snapshot"
 session_rows_preserved "$legacy_reading_db" reading reading "$reading_sessions_snapshot"
+docker exec "$legacy_provider_db" psql -U central -d central -Atc "$provider_user_sql" | grep -Fx "$provider_user_digest" >/dev/null
+docker exec "$legacy_provider_db" psql -U central -d central -Atc "$provider_client_sql" | grep -Fx "$provider_client_digest" >/dev/null
+docker exec "$legacy_provider_db" psql -U central -d central -Atc "$account_links_sql" | grep -Fx "$provider_account_digest" >/dev/null
+docker exec "$legacy_reading_db" psql -U reading -d reading -Atc "$reading_user_sql" | grep -Fx "$reading_user_digest" >/dev/null
+docker exec "$legacy_reading_db" psql -U reading -d reading -Atc "$reading_content_sql" | grep -Fx "$reading_content_digest" >/dev/null
+docker exec "$legacy_reading_db" psql -U reading -d reading -Atc "$account_links_sql" | grep -Fx "$reading_account_digest" >/dev/null
+docker exec "$legacy_reading_db" psql -U reading -d reading -Atc "$memberships_sql" | grep -Fx "$reading_membership_digest" >/dev/null
 docker stop "$old_ingress" >/dev/null; docker rm "$old_ingress" >/dev/null
 "${compose_legacy[@]}" stop auth web reading-backend reading-frontend db reading-db
 docker start "$edge_container" >/dev/null
