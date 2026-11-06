@@ -72,4 +72,5 @@ networks:
 
 volumes:
   production-db:
-    name: ${COMPOSE_PROJECT_NAME:-central-identity-production}_production-db
+    name: ${IDENTITY_DB_VOLUME:?Set IDENTITY_DB_VOLUME to the verified existing Central Identity volume}
+    external: true

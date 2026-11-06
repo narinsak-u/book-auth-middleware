@@ -37,6 +37,7 @@ yarn-error.log*
 !/.env.development
 !/.env.production
 !/.env.test-production
+/.env.identity.production
 # local env files
 .env.local
 .env.development.local

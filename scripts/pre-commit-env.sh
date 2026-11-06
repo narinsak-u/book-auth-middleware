@@ -42,7 +42,7 @@ while IFS= read -r -d '' file; do
         exit 1
       fi
       ;;
-    .env.example|.env.development.example|.env.production.example|.env.test-production.example) ;;
+    .env.example|.env.development.example|.env.identity.production.example|.env.test-production.example) ;;
     .env|.env.*|*/.env|*/.env.*)
       echo "Refusing to commit an unsupported environment file: $file" >&2
       exit 1
