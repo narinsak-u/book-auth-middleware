@@ -11,9 +11,12 @@ For complete three-repository setup and browser tests, follow the
 [Development SSO workflow](docs/local-oauth-sso.md).
 
 Install Bun 1.4.2 or newer and Docker Engine with Compose. Port 8080 must be
-available. The provider is served over HTTPS at
-`https://auth.127.0.0.1.nip.io:8080`; that hostname resolves to loopback. Caddy
-creates a local CA, which must be trusted by the host and browser.
+available. The development origins use HTTPS `.localhost` names:
+`https://auth.localhost:8080`, `https://bidding.localhost:8080`, and
+`https://reading.localhost:8080`. `.localhost` resolves to loopback in many
+resolvers, but WSL and Windows browser resolution can differ; test each in the
+actual browser. Caddy creates a local CA that the host, Node processes, and
+browser must trust.
 
 Install the pinned tools and start the development stack:
 
@@ -32,10 +35,10 @@ use Docker's `host-gateway` mapping.
 Compose runs five local services: PostgreSQL, Mailpit, the Elysia/Better Auth
 server (`auth`), the TanStack Start Authentication Portal (`web`), and Caddy.
 The two Bun processes run separately behind Caddy on public HTTPS port `8080`:
-`https://auth.127.0.0.1.nip.io:8080` for Central Identity,
-`https://bidding.127.0.0.1.sslip.io:8080` for Book Bidding, and
-`https://reading.lvh.me:8080` for Read in Peace. Caddy sends portal pages to
-`web` and Better Auth protocol, discovery/JWKS, and health traffic to `auth`.
+`https://auth.localhost:8080` for Central Identity,
+`https://bidding.localhost:8080` for Book Bidding, and
+`https://reading.localhost:8080` for Read in Peace. Caddy sends portal pages
+to `web` and Better Auth protocol, discovery/JWKS, and health traffic to `auth`.
 PostgreSQL stays private. The root `build`, `typecheck`, and `test` commands run
 through Turborepo. Compose applies the committed migrations before starting
 `auth`; migration failure prevents the server from starting. PostgreSQL data
@@ -80,8 +83,8 @@ remain untouched. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET` in the encrypted local
 environment to enable provider sign-in. Register these exact callbacks:
 
-- Google: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/google`
-- GitHub: `https://auth.127.0.0.1.nip.io:8080/api/auth/callback/github`
+- Google: `https://auth.localhost:8080/api/auth/callback/google`
+- GitHub: `https://auth.localhost:8080/api/auth/callback/github`
 
 Use a Google email marked verified. For GitHub, grant `user:email`; users with
 private email must allow the app to read a verified email or sign-in is refused.
@@ -119,7 +122,7 @@ only that session. It prevents a fresh OIDC authorization from silently
 reusing it, but it does not revoke Book Bidding or Read in Peace Application
 Sessions; sign out in each application separately when needed.
 
-Export and trust Caddy's local CA once after Caddy has started:
+Export and trust Caddy's development CA once after Caddy has started:
 
 ```sh
 docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./central-identity-root.crt
@@ -127,23 +130,38 @@ sudo cp central-identity-root.crt /usr/local/share/ca-certificates/central-ident
 sudo update-ca-certificates
 ```
 
-For browsers with a separate certificate store, import `central-identity-root.crt` there as a trusted certificate authority. Restart the browser after importing. Do not share the private CA key or use this CA outside local development.
+For Windows browsers under WSL, import the exported public `root.crt` into the
+intended current-user Windows Root store. Node apps must use the same root with
+`NODE_EXTRA_CA_CERTS`; never disable TLS verification or share the private CA
+key. Existing browser sessions and emailed verification/reset links do not
+carry over to the new host. Sign in again and request fresh links.
 
-Open <https://auth.127.0.0.1.nip.io:8080> to reach the Authentication Portal.
+Open <https://auth.localhost:8080> to reach the Authentication Portal.
 It provides username/email-password and configured Google/GitHub sign-in,
 open verified registration, explicit provider linking, and central sign-out.
 
 ## Book Bidding OIDC demo
 
 Use the sibling repository at `../book-bidding` with sign-in callback
-`https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`
+`https://bidding.localhost:8080/api/auth/callback/central-identity`
 and recovery callback
-`https://bidding.127.0.0.1.sslip.io:8080/api/identity-recovery/callback`.
+`https://bidding.localhost:8080/api/identity-recovery/callback`.
+Before changing external provider settings, update the operator-owned Google
+and GitHub registrations to `https://auth.localhost:8080/api/auth/callback/google`
+and `https://auth.localhost:8080/api/auth/callback/github`. If Reviewed Recovery
+uses separate Google/GitHub registrations, update those callbacks too. Back up
+the Central Identity database before retargeting callbacks; keep current client
+IDs/secrets and request fresh email links after the host cutover. Existing
+browser sessions do not transfer to the new host. Social and recovery sign-in
+remain unverified.
+
 The client is confidential (`client_secret_basic`), first-party,
 authorization-code-only, and PKCE-required. Client provisioning is a local
 operator command, not an HTTP endpoint:
 
-The canonical issuer is `https://auth.127.0.0.1.nip.io:8080/api/auth`; its OpenID Connect discovery document is at `https://auth.127.0.0.1.nip.io:8080/api/auth/.well-known/openid-configuration`.
+The canonical issuer is `https://auth.localhost:8080/api/auth`; its OpenID
+Connect discovery document is at
+`https://auth.localhost:8080/api/auth/.well-known/openid-configuration`.
 
 ```sh
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null up -d db mailpit
@@ -158,7 +176,7 @@ Start the provider and TLS proxy:
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null up --build -d
 ```
 
-Caddy serves Book Bidding at `bidding.127.0.0.1.sslip.io:8080` and proxies to the Vite server on port 5173. In a second terminal, start Book Bidding from `../book-bidding` using its encrypted `.env.development`:
+Caddy serves Book Bidding at `bidding.localhost:8080` and proxies to the Vite server on port 5173. In a second terminal, start Book Bidding from `../book-bidding` using its encrypted `.env.development`:
 
 ```sh
 cd ../book-bidding
@@ -166,15 +184,15 @@ bun install --frozen-lockfile
 NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
 ```
 
-Authenticate at Central Identity with username/email-password after verifying the email, or use a configured Google/GitHub account with verified email. On `https://bidding.127.0.0.1.sslip.io:8080/auth/login`, choose **Continue with Central Identity**. The app stores the validated OIDC issuer/subject as a Generic OAuth account and creates its own ordinary Application User and host-only Application Session. Existing same-email application users are not linked implicitly; sign-in credentials remain only at Central Identity.
+Authenticate at Central Identity with username/email-password after verifying the email, or use a configured Google/GitHub account with verified email. On `https://bidding.localhost:8080/auth/login`, choose **Continue with Central Identity**. The app stores the validated OIDC issuer/subject as a Generic OAuth account and creates its own ordinary Application User and host-only Application Session. Existing same-email application users are not linked implicitly; sign-in credentials remain only at Central Identity.
 
 The browser proof requires verified email for new credential identities and real provider sign-in for Google/GitHub. Keep the Caddy CA trust setup above. Keep app secrets in each app's encrypted `.env.development`, not ignored plaintext `.env`.
 
 ## Read in Peace OIDC demo
 
 Use the sibling repository at `../read-in-peace` with sign-in callback
-`https://reading.lvh.me:8080/api/auth/callback/central-identity` and recovery
-callback `https://reading.lvh.me:8080/api/identity-recovery/callback`.
+`https://reading.localhost:8080/api/auth/callback/central-identity` and recovery
+callback `https://reading.localhost:8080/api/identity-recovery/callback`.
 Provision its confidential, first-party client after its encrypted development
 environment and private `.env.keys` already exist:
 
@@ -193,7 +211,7 @@ on startup. Provisioning marks it `skip_consent: true` and uses/removes a
 random temporary identity to authenticate the privileged CLI operation.
 
 Start Read in Peace's PostgreSQL and backend migrations, then run its backend
-and frontend with the `reading.lvh.me` URLs described in its README. Opening
+and frontend with the `reading.localhost` URLs described in its README. Opening
 **Continue with Central Identity** creates an independent Reading Application
 Session; signing out of Reading does not sign out Book Bidding or Central
 Identity.
@@ -224,8 +242,8 @@ Run this local CLI only with operator access to the provider database. There is 
 With Compose running from the auth repository root and the local CA trusted:
 
 ```sh
-curl https://auth.127.0.0.1.nip.io:8080/health/live
-curl https://auth.127.0.0.1.nip.io:8080/health/ready
+curl https://auth.localhost:8080/health/live
+curl https://auth.localhost:8080/health/ready
 bunx dotenvx run --strict --overload -f .env.development -- bun run test
 ```
 
@@ -240,8 +258,8 @@ To exercise database-dependent readiness failure while keeping the provider proc
 
 ```sh
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null stop db
-curl -i https://auth.127.0.0.1.nip.io:8080/health/live  # HTTP 200
-curl -i https://auth.127.0.0.1.nip.io:8080/health/ready # HTTP 503
+curl -i https://auth.localhost:8080/health/live  # HTTP 200
+curl -i https://auth.localhost:8080/health/ready # HTTP 503
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null start db
 ```
 
