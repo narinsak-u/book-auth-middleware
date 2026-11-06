@@ -28,6 +28,10 @@ _Avoid_: SSO session
 An independently operated application that accepts Central Identity authentication while retaining its own Application Users, Application Sessions, and access rules.
 _Avoid_: Demo application, shared application
 
+**OIDC Client**:
+A Relying Party's separate registration with Central Identity for one environment, including its approved callback destinations. It is not an Application User or an External Provider.
+_Avoid_: Application User, External Provider
+
 **External Provider**:
 An independently operated identity service, such as Google or GitHub, used to authenticate a Central Identity. It is not a Relying Party.
 _Avoid_: Relying Party, Central Identity
