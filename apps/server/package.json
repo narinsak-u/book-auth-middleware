@@ -11,7 +11,8 @@
     "disable:central-identity": "bun src/disable-central-identity.ts",
     "recover-identity": "bun src/recover-identity.ts",
     "provision:bidding": "bun src/provision-bidding.ts",
-    "provision:reading": "bun src/provision-reading.ts"
+    "provision:reading": "bun src/provision-reading.ts",
+    "retarget:oauth-client": "bun src/retarget-oauth-client.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.15",
