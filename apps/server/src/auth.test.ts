@@ -188,13 +188,12 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         headers: { cookie: sessionCookie!, origin: provider! },
         redirect: "manual",
       });
-      expect(rejectedAuthorization.status).toBeGreaterThanOrEqual(400);
-      const rejectedLocation = rejectedAuthorization.headers.get("location");
-      expect(
-        !rejectedLocation
-        || `${new URL(rejectedLocation, provider!).origin}${new URL(rejectedLocation, provider!).pathname}`
-          !== `${unregisteredCallback.origin}${unregisteredCallback.pathname}`,
-      ).toBe(true);
+      expect(rejectedAuthorization.status).toBeGreaterThanOrEqual(300);
+      expect(rejectedAuthorization.status).toBeLessThan(500);
+      if (rejectedAuthorization.status < 400) {
+        const error = new URL(rejectedAuthorization.headers.get("location")!, provider!);
+        expect(`${error.origin}${error.pathname}`).toBe(`${provider}/api/auth/error`);
+      }
       const authorization = await fetch(authorize, {
         headers: { cookie: sessionCookie!, origin: provider! },
         redirect: "manual",
