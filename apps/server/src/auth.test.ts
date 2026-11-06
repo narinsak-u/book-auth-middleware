@@ -181,6 +181,20 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
       }).toString();
+      const unregisteredCallback = new URL("/unregistered-callback", relyingPartyRedirectUri!);
+      const unregisteredAuthorize = new URL(authorize);
+      unregisteredAuthorize.searchParams.set("redirect_uri", unregisteredCallback.href);
+      const rejectedAuthorization = await fetch(unregisteredAuthorize, {
+        headers: { cookie: sessionCookie!, origin: provider! },
+        redirect: "manual",
+      });
+      expect(rejectedAuthorization.status).toBeGreaterThanOrEqual(400);
+      const rejectedLocation = rejectedAuthorization.headers.get("location");
+      expect(
+        !rejectedLocation
+        || `${new URL(rejectedLocation, provider!).origin}${new URL(rejectedLocation, provider!).pathname}`
+          !== `${unregisteredCallback.origin}${unregisteredCallback.pathname}`,
+      ).toBe(true);
       const authorization = await fetch(authorize, {
         headers: { cookie: sessionCookie!, origin: provider! },
         redirect: "manual",
