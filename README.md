@@ -59,6 +59,99 @@ test-only database, OAuth, and secret values, then run
 only while editing it. Development uses `bun run env:decrypt` and
 `bun run env:encrypt`. Keep test-production keys separate from development and
 live production keys.
+
+Test-production uses `auth-test.localhost`, `bidding-test.localhost`, and
+`reading-test.localhost` on HTTPS port `8081`; all names resolve to loopback.
+Its Compose project name gives PostgreSQL and Caddy their own persistent
+volumes, including a CA separate from development. It does not use public
+production settings. Preserve existing test-production client IDs and secrets.
+If this checkout has no `.env.test-production` and
+`.env.test-production.keys`, do not copy production credentials or reuse
+development keys. Wait for operator-owned test OAuth credentials, then create
+the isolated file and key from the example using fresh local-only database and
+Better Auth secrets. The example deliberately contains no credentials.
+
+The CLI can create a new local-only relying-party client and print its
+one-time secret. Use only against the isolated test-production database, and
+store the output privately:
+
+```sh
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml up -d db mailpit
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps auth bun run provision:bidding
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps auth bun run provision:reading
+```
+
+Provisioning new clients is optional; do not use it to replace existing
+test-production registrations. For existing clients, retarget only the
+test-production database with `bun run retarget:oauth-client bidding` or
+`reading`, setting `OIDC_SIGN_IN_REDIRECT_URI` and
+`OIDC_RECOVERY_REDIRECT_URI` to that app's exact callback pair below.
+
+The issuer is `https://auth-test.localhost:8081/api/auth`. Existing Relying
+Party callback pairs must be:
+
+- Bidding: `https://bidding-test.localhost:8081/api/auth/callback/central-identity`
+  and `https://bidding-test.localhost:8081/api/identity-recovery/callback`
+- Reading: `https://reading-test.localhost:8081/api/auth/callback/central-identity`
+  and `https://reading-test.localhost:8081/api/identity-recovery/callback`
+
+Retarget the existing registrations from the auth repository root; these
+commands keep each client's ID and secret and replace only its callback pair:
+
+```sh
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps -e OIDC_SIGN_IN_REDIRECT_URI=https://bidding-test.localhost:8081/api/auth/callback/central-identity -e OIDC_RECOVERY_REDIRECT_URI=https://bidding-test.localhost:8081/api/identity-recovery/callback auth bun run retarget:oauth-client bidding
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml run --rm --no-deps -e OIDC_SIGN_IN_REDIRECT_URI=https://reading-test.localhost:8081/api/auth/callback/central-identity -e OIDC_RECOVERY_REDIRECT_URI=https://reading-test.localhost:8081/api/identity-recovery/callback auth bun run retarget:oauth-client reading
+```
+
+The operator must also update Google and GitHub app settings if they enable
+social sign-in:
+
+- Google: `https://auth-test.localhost:8081/api/auth/callback/google`
+- GitHub: `https://auth-test.localhost:8081/api/auth/callback/github`
+
+Do not reuse development or public-production provider apps. This runbook does
+not claim live social sign-in.
+
+Export and trust only the test-production Caddy root for clients using this
+stack. Keep the file private to the local machine; never share the CA key:
+
+```sh
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml cp caddy:/data/caddy/pki/authorities/local/root.crt ./central-test-production-root.crt
+```
+
+Use this CA, not `central-identity-root.crt`, for browser and Node trust.
+Trusting it in a browser is a separate operator action. Existing sessions or
+bookmarks use the old hosts; sign in again and open fresh `-test.localhost`
+links after cutover.
+
+Check the isolated HTTPS routes without disabling certificate verification:
+
+```sh
+curl --cacert ./central-test-production-root.crt --resolve auth-test.localhost:8081:127.0.0.1 https://auth-test.localhost:8081/
+curl --cacert ./central-test-production-root.crt --resolve auth-test.localhost:8081:127.0.0.1 https://auth-test.localhost:8081/health/ready
+curl --cacert ./central-test-production-root.crt --resolve auth-test.localhost:8081:127.0.0.1 https://auth-test.localhost:8081/api/auth/.well-known/openid-configuration | jq -e '.issuer == "https://auth-test.localhost:8081/api/auth"'
+curl --cacert ./central-test-production-root.crt --resolve bidding-test.localhost:8081:127.0.0.1 https://bidding-test.localhost:8081/
+curl --cacert ./central-test-production-root.crt --resolve reading-test.localhost:8081:127.0.0.1 https://reading-test.localhost:8081/
+```
+
+Confirm discovery advertises
+`https://auth-test.localhost:8081/api/auth`. Confirm each existing client
+accepts its new sign-in and recovery callback and rejects the old callbacks.
+These checks cover gateway, metadata, and callback configuration; they do not
+claim a browser SSO journey.
+
+
+Exercise the public HTTP callback check through the isolated CA. It accepts
+the registered sign-in callback and rejects an unregistered origin:
+
+```sh
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- sh -c 'NODE_EXTRA_CA_CERTS="$PWD/central-test-production-root.crt" TEST_PROVIDER_URL=https://auth-test.localhost:8081 TEST_RP_CLIENT_ID="$BIDDING_OIDC_CLIENT_ID" TEST_RP_REDIRECT_URI=https://bidding-test.localhost:8081/api/auth/callback/central-identity bun test apps/server/src/auth.test.ts'
+bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- sh -c 'NODE_EXTRA_CA_CERTS="$PWD/central-test-production-root.crt" TEST_PROVIDER_URL=https://auth-test.localhost:8081 TEST_RP_CLIENT_ID="$READING_OIDC_CLIENT_ID" TEST_RP_REDIRECT_URI=https://reading-test.localhost:8081/api/auth/callback/central-identity bun test apps/server/src/auth.test.ts'
+```
+
+Run the same checks after retargeting. The existing HTTP retarget integration
+test also verifies acceptance of new callbacks and rejection of old callbacks
+when its disposable-database settings are provided.
 The pre-commit hook encrypts staged root environment files; it never decrypts
 before commit. Keep the database volume and existing client IDs/secrets stable
 across restarts. Use `bun run dev` for the full development Compose stack and
@@ -284,11 +377,6 @@ The `--strict` flag prevents startup when decryption fails; Compose also
 rejects missing required settings. Images exclude env files and private keys;
 the production stack uses its own persistent PostgreSQL and Caddy volumes,
 real SMTP instead of Mailpit, and public TLS instead of Caddy's local CA.
-Test-production enrollment uses Google and GitHub OAuth. Register separate
-provider apps and these exact callbacks:
-
-- Google: `https://auth-test.127.0.0.1.nip.io:8081/api/auth/callback/google`
-- GitHub: `https://auth-test.127.0.0.1.nip.io:8081/api/auth/callback/github`
 
 Central supports username/email-password registration with required email
 verification. Invitation records remain in `enrollment_invitation`; registration

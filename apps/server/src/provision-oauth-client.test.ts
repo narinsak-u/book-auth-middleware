@@ -1,22 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { validateOAuthRedirectURIs } from "./provision-oauth-client";
 
-const oldCallbacks = [
-  "https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity",
-  "https://bidding.127.0.0.1.sslip.io:8080/api/identity-recovery/callback",
-];
-const newCallbacks = [
-  "https://bidding.example.test/api/auth/callback/central-identity",
-  "https://bidding.example.test/api/identity-recovery/callback",
+const testCallbacks = [
+  "https://bidding-test.localhost:8081/api/auth/callback/central-identity",
+  "https://bidding-test.localhost:8081/api/identity-recovery/callback",
 ];
 
 describe("first-party OAuth callback registration", () => {
 
   test("accepts and rejects exact callback pairs", () => {
-    expect(() => validateOAuthRedirectURIs(oldCallbacks)).not.toThrow();
+    expect(() => validateOAuthRedirectURIs(testCallbacks)).not.toThrow();
     expect(() => validateOAuthRedirectURIs([
-      newCallbacks[0],
-      `${newCallbacks[1]}?next=https://other.example.test`,
+      testCallbacks[0],
+      `${testCallbacks[1]}?next=https://other.example.test`,
     ])).toThrow();
   });
 
