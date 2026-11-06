@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { authClient } from "./auth-client";
 
 function Shell({ children }: { children: ReactNode }) {
@@ -46,7 +46,10 @@ export function ForgotPassword() {
 }
 
 export function ResetPassword() {
-  const token = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("token") ?? "";
+  const [token, setToken] = useState("");
+  useEffect(() => {
+    setToken(new URLSearchParams(window.location.search).get("token") ?? "");
+  }, []);
   const returnTo = safeReturnTo();
   const [pending, setPending] = useState(false);
   const [complete, setComplete] = useState(false);
