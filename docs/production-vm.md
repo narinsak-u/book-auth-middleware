@@ -28,7 +28,7 @@ pg_restore --list "$BACKUP_DIR/reading.dump" >/dev/null
 sha256sum "$BACKUP_DIR/central-identity.dump" "$BACKUP_DIR/reading.dump" >"$BACKUP_DIR/SHA256SUMS"
 ```
 
-Restore each dump into its own disposable PostgreSQL instance and volume using that database's recorded PostgreSQL image/version, never the live volume. Compare provider `user`, `session`, and `oauth_client` IDs/callbacks and Reading `user`, `session`, and application content IDs/counts with the pre-backup inventory. Keep restore logs and checksums with the protected backup record. A successful `pg_restore --list` alone is not restore proof.
+Restore each dump into its own disposable PostgreSQL instance and volume using that database's recorded PostgreSQL image/version, never the live volume. Compare provider `user`, `account` Provider Links, `session`, and `oauth_client` IDs/callbacks with the pre-backup inventory. Compare Reading `user`, `account` Identity Links, `memberships`, `session`, and application content IDs/counts with that inventory. Keep restore logs and checksums with the protected backup record. A successful `pg_restore --list` alone is not restore proof.
 
 This repository has no access to those operator systems. Its local synthetic checks do not satisfy these gates.
 
