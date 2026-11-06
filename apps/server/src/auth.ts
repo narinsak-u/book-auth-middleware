@@ -18,7 +18,7 @@ const oauthEnabled = !production || testProduction;
 const productionRuntime = production && !testProduction;
 const baseURL = production
   ? required("BETTER_AUTH_URL")
-  : process.env.BETTER_AUTH_URL ?? "https://auth.127.0.0.1.nip.io:8080";
+  : process.env.BETTER_AUTH_URL ?? "https://auth.localhost:8080";
 const authSecret = production
   ? required("BETTER_AUTH_SECRET")
   : process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars";
