@@ -5,8 +5,8 @@ const production = process.env.NODE_ENV === "production" && !testProduction;
 const origin = production
   ? undefined
   : testProduction
-    ? "https://bidding-test.127.0.0.1.sslip.io:8081"
-    : "https://bidding.localhost:8080";
+    ? "https://bidding-test.localhost:8081"
+    : "https://bidding.localhost:8080"
 const redirectURI = process.env.BIDDING_OIDC_REDIRECT_URI ?? (origin && `${origin}/api/auth/callback/central-identity`);
 const recoveryRedirectURI = process.env.BIDDING_RECOVERY_OIDC_REDIRECT_URI ?? (origin && `${origin}/api/identity-recovery/callback`);
 if (!redirectURI || !recoveryRedirectURI) {
