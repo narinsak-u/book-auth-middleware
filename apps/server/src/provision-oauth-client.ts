@@ -1,6 +1,24 @@
 import { closeDatabase } from "@central-identity/db";
 
-export async function provisionOAuthClient(clientName: string, emailPrefix: string, redirectURI: string) {
+export function validateOAuthRedirectURIs(redirectURIs: string[]) {
+  if (redirectURIs.length !== 2) throw new Error("OAuth clients require exactly one sign-in and one recovery callback");
+  const callbacks = redirectURIs.map((uri) => new URL(uri));
+  if (
+    callbacks[0].protocol !== "https:" ||
+    callbacks[1].protocol !== "https:" ||
+    callbacks.some((url, index) =>
+      url.origin + url.pathname !== redirectURIs[index] || url.search || url.hash || url.username || url.password
+    ) ||
+    callbacks[0].origin !== callbacks[1].origin ||
+    callbacks[0].pathname !== "/api/auth/callback/central-identity" ||
+    callbacks[1].pathname !== "/api/identity-recovery/callback"
+  ) {
+    throw new Error("OAuth callbacks must be exact HTTPS URIs on one origin with the registered sign-in and recovery paths");
+  }
+}
+
+export async function provisionOAuthClient(clientName: string, emailPrefix: string, redirectURIs: string[]) {
+  validateOAuthRedirectURIs(redirectURIs);
   // Dynamic import is required so this privilege is set before auth initializes.
   process.env.BIDDING_OIDC_PROVISIONING = "true";
   const { auth } = await import("./auth");
@@ -38,7 +56,7 @@ export async function provisionOAuthClient(clientName: string, emailPrefix: stri
         body: {
           client_name: clientName,
           application_type: "web",
-          redirect_uris: [redirectURI],
+          redirect_uris: redirectURIs,
           token_endpoint_auth_method: "client_secret_basic",
           grant_types: ["authorization_code"],
           response_types: ["code"],
@@ -61,7 +79,7 @@ export async function provisionOAuthClient(clientName: string, emailPrefix: stri
         where: [{ field: "clientId", value: client.client_id }],
       });
       if (!detached || detached.userId) throw new Error("OAuth client was not detached from its temporary owner");
-      console.log(JSON.stringify({ clientId: client.client_id, clientSecret: client.client_secret, redirectURI }, null, 2));
+      console.log(JSON.stringify({ clientId: client.client_id, clientSecret: client.client_secret, redirectURIs }, null, 2));
     } finally {
       await context.internalAdapter.deleteUserSessions(user.id);
       await context.internalAdapter.deleteAccounts(user.id);

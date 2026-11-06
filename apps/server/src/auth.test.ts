@@ -1,45 +1,164 @@
 import { describe, expect, test } from "bun:test";
 
 const provider = process.env.TEST_PROVIDER_URL;
+const mailpit = process.env.TEST_MAILPIT_URL;
+const relyingPartyClientId = process.env.TEST_RP_CLIENT_ID;
+const relyingPartyRedirectUri = process.env.TEST_RP_REDIRECT_URI;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
-async function retired(path: string, body: object, invitation?: string) {
+  test.skipIf(!mailpit)("requests password resets without disclosing account existence and rejects replay", async () => {
+    const username = `recovery_${crypto.randomUUID().slice(0, 8)}`;
+    const email = `${crypto.randomUUID()}@example.test`;
+    const password = "verified-password-123";
+    const signup = await authPost("sign-up/email", {
+      name: "Recovery User",
+      username,
+      email,
+      password,
+    });
+    expect(signup.status).toBe(200);
+    const inbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+    const verificationMessage = (await inbox.json()).messages[0];
+    const verification = await fetch(`${mailpit}/api/v1/message/${verificationMessage.ID}`);
+    const verificationURL = (await verification.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    expect(typeof verificationURL).toBe("string");
+    await fetch(verificationURL!, { redirect: "manual" });
+
+    const returnTo = "/sign-in?oauth_query=client_id%3Dtrusted%26sig%3Dsigned";
+    const redirectTo = `${provider}/reset-password?returnTo=${encodeURIComponent(returnTo)}`;
+    const requestReset = (address: string) => authPost("request-password-reset", {
+      email: address,
+      redirectTo,
+    });
+    const existingRequest = await requestReset(email);
+    const missingRequest = await requestReset(`${crypto.randomUUID()}@example.test`);
+    expect(existingRequest.status).toBe(missingRequest.status);
+    expect(await existingRequest.text()).toBe(await missingRequest.text());
+
+    const priorSession = await authPost("sign-in/email", { email, password });
+    expect(priorSession.status).toBe(200);
+    const sessionCookie = priorSession.headers.get("set-cookie")?.split(";")[0];
+    expect(sessionCookie).toContain("session_token=");
+
+    const resetInbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+    const resetMessage = (await resetInbox.json()).messages[0];
+    const resetMail = await fetch(`${mailpit}/api/v1/message/${resetMessage.ID}`);
+    const resetURL = (await resetMail.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    expect(typeof resetURL).toBe("string");
+    const redirect = await fetch(resetURL!, { redirect: "manual" });
+    const resetPage = new URL(redirect.headers.get("location")!);
+    const token = resetPage.searchParams.get("token");
+    if (!token) throw new Error("Password reset email had no token");
+    expect(resetPage.searchParams.get("returnTo")).toBe(returnTo);
+    expect(resetPage.origin).toBe(provider!);
+
+    const reset = (newPassword: string) => authPost("reset-password", { token, newPassword });
+    expect((await reset("new-verified-password-456")).status).toBe(200);
+    expect((await reset("replayed-password-789")).status).toBeGreaterThanOrEqual(400);
+    const revokedSession = await fetch(`${provider}/api/auth/get-session`, {
+      headers: { cookie: sessionCookie! },
+    });
+    expect(await revokedSession.json()).toBeNull();
+    expect((await authPost("sign-in/email", { email, password })).status).toBeGreaterThanOrEqual(400);
+    expect((await authPost("sign-in/email", { email, password: "new-verified-password-456" })).status).toBe(200);
+  });
+
+  test("rejects invalid reset tokens through the public HTTP API", async () => {
+    const response = await authPost("reset-password", {
+      token: crypto.randomUUID(),
+      newPassword: "new-verified-password-456",
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
+async function authPost(path: string, body: object) {
   return fetch(`${provider}/api/auth/${path}`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(invitation ? { "x-enrollment-invitation": invitation } : {}),
-    },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
-  test("rejects legacy enrollment and password authentication", async () => {
-    const signup = await retired("sign-up/email", {
-      name: "Legacy User",
-      email: `legacy-${crypto.randomUUID()}@example.test`,
-      password: "local-proof-password-123",
+  test("accepts open credential registration and rejects duplicate usernames", async () => {
+    const username = `person_${crypto.randomUUID().slice(0, 8)}`;
+    const email = `${crypto.randomUUID()}@example.test`;
+    const signup = await authPost("sign-up/email", {
+      name: "Registration User",
+      username,
+      email,
+      password: "verified-password-123",
     });
-    expect((await retired("sign-up/email", {
-      name: "Legacy User",
-      email: `legacy-${crypto.randomUUID()}@example.test`,
-      password: "local-proof-password-123",
-    }, crypto.randomUUID())).status).toBe(410);
-    expect(signup.status).toBe(410);
+    expect(signup.status).toBe(200);
 
-    const signin = await retired("sign-in/email", {
-      email: `legacy-${crypto.randomUUID()}@example.test`,
-      password: "local-proof-password-123",
+    const duplicate = await authPost("sign-up/email", {
+      name: "Second User",
+      username: username.toUpperCase(),
+      email: `${crypto.randomUUID()}@example.test`,
+      password: "verified-password-123",
     });
-    expect(signin.status).toBe(410);
+    expect(duplicate.status).toBeGreaterThanOrEqual(400);
   });
 
-  test("rejects legacy password reset endpoints", async () => {
-    expect((await retired("request-password-reset", { email: "person@example.test" })).status).toBe(410);
-    expect((await retired("reset-password", { token: "retired", newPassword: "local-proof-password-123" })).status).toBe(410);
+  test.skipIf(!mailpit)("verifies open registration before username and email sign-in", async () => {
+    const username = `person_${crypto.randomUUID().slice(0, 8)}`;
+    const email = `${crypto.randomUUID()}@example.test`;
+    const signup = await authPost("sign-up/email", {
+      name: "Verified User",
+      username,
+      email,
+      password: "verified-password-123",
+      callbackURL: `${provider}/sign-in?verified=1`,
+    });
+    expect(signup.status).toBe(200);
+
+    const inbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+    const message = (await inbox.json()).messages[0];
+    const mail = await fetch(`${mailpit}/api/v1/message/${message.ID}`);
+    const verificationURL = (await mail.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    expect(typeof verificationURL).toBe("string");
+    await fetch(verificationURL!, { redirect: "manual" });
+
+    for (const identifier of [username, email]) {
+      const signin = await authPost(
+        identifier === email ? "sign-in/email" : "sign-in/username",
+        identifier === email
+          ? { email: identifier, password: "verified-password-123" }
+          : { username: identifier, password: "verified-password-123" },
+      );
+      expect(signin.status).toBe(200);
+      expect(signin.headers.get("set-cookie")).toContain("session_token=");
+    }
+    const absent = await authPost("sign-in/username", {
+      username: `missing_${crypto.randomUUID().slice(0, 8)}`,
+      password: "wrong-password-123",
+    });
+    const wrong = await authPost("sign-in/username", {
+      username,
+      password: "wrong-password-123",
+    });
+    expect(absent.status).toBe(wrong.status);
+    expect(await absent.text()).toBe(await wrong.text());
   });
 
+
+  test.skipIf(!relyingPartyClientId || !relyingPartyRedirectUri)(
+    "restores only a registered relying-party origin after authorization state expires",
+    async () => {
+      const query = new URLSearchParams({
+        client_id: relyingPartyClientId!,
+        redirect_uri: relyingPartyRedirectUri!,
+      });
+      const restored = await fetch(`${provider}/api/auth/relying-party-destination?${query}`);
+      expect(restored.status).toBe(200);
+      expect(await restored.json()).toEqual({ destination: new URL(relyingPartyRedirectUri!).origin });
+
+      query.set("redirect_uri", "https://attacker.example/callback");
+      const rejected = await fetch(`${provider}/api/auth/relying-party-destination?${query}`);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({ destination: null });
+    },
+  );
   test("keeps public OIDC discovery and readiness available", async () => {
     const discovery = await fetch(`${provider}/api/auth/.well-known/openid-configuration`);
     expect(discovery.status).toBe(200);

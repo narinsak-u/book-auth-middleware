@@ -29,6 +29,13 @@
       "when": 1793731731090,
       "tag": "0003_enrollment_invitation",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793731731091,
+      "tag": "0004_central_username",
+      "breakpoints": true
     }
   ]
 }

@@ -2,25 +2,28 @@
 
 Run these commands from three sibling repositories: `book-auth-middleware/`,
 `book-bidding/`, and `read-in-peace/`. This workflow is for development.
-Live production still uses its existing invitation/password flow. Preserve
-existing databases and Compose volumes; never run `down -v` or reseed them
-just to test SSO.
+Open Central Identity registration and username/email-password sign-in are
+available in development. Preserve existing databases and Compose volumes;
+never run `down -v` or reseed them just to test SSO.
 
 ## How sign-in works
 
-1. Book Bidding or Read in Peace redirects the browser to Central Identity's
-   OIDC issuer at `https://auth.127.0.0.1.nip.io:8080/api/auth`.
-2. Central signs the person in through Google or GitHub. The provider must
-   supply a verified email. A first provider sign-in creates a Central Identity
-   and its host-only Central SSO Session; no invitation or Central password is
-   needed. Matching email alone never links another provider account.
+1. Book Bidding or Read in Peace starts OIDC from its own Sign In entry point.
+   The browser reaches Central Identity at
+   `https://auth.127.0.0.1.nip.io:8080/api/auth`.
+2. Central Identity accepts username or email and password. New credential
+   identities verify email before sign-in. Google and GitHub require separate
+   operator-owned provider registrations and are not part of the verified
+   cross-app browser flow described below.
 3. Central returns an authorization code to the requesting application's
-   registered callback. The application exchanges the code, checks the issuer
-   and subject, then uses its own Application User and Application Session.
-   Matching email alone does not claim an existing application user either.
-4. The browser can use its Central SSO Session for the other application without
-   another provider prompt. Central sign-out ends only the Central session;
-   each application session survives until that application ends it or it expires.
+   registered callback. The application validates it and creates its own
+   Application Session for its own Application User. Matching email alone
+   never claims an existing application user.
+4. The browser can reuse its Central SSO Session at the other application,
+   which creates a separate Application Session without another credential
+   prompt. Local application logout ends only that application's session.
+   Central logout ends the Central SSO Session; it does not revoke existing
+   Application Sessions.
 
 | Service | Development process | Public HTTPS origin |
 | --- | --- | --- |
@@ -75,13 +78,21 @@ docker compose --env-file /dev/null exec -T auth bun run provision:reading
 ```
 
 Each command prints a one-time client ID and secret. Capture each privately:
-Book Bidding and Read in Peace need **different** credentials. The registered
-callbacks are respectively
-`https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`
-and `https://reading.lvh.me:8080/api/auth/callback/central-identity`. Skip
-provisioning on later boots if the existing registrations already use those
-exact callbacks; otherwise provision replacements rather than resetting a
-database. No user can register a client through the public HTTP API.
+Book Bidding and Read in Peace need **different** credentials. Each client
+registers both exact HTTPS callbacks:
+
+- Bidding sign-in: `https://bidding.127.0.0.1.sslip.io:8080/api/auth/callback/central-identity`
+- Bidding recovery: `https://bidding.127.0.0.1.sslip.io:8080/api/identity-recovery/callback`
+- Reading sign-in: `https://reading.lvh.me:8080/api/auth/callback/central-identity`
+- Reading recovery: `https://reading.lvh.me:8080/api/identity-recovery/callback`
+
+Provisioning rejects non-HTTPS callbacks, query/hash/userinfo, wrong paths, or
+callbacks on different origins. Production provisioning requires exact
+`BIDDING_RECOVERY_OIDC_REDIRECT_URI` and `READING_RECOVERY_OIDC_REDIRECT_URI`
+values matching each application's recovery callback. Skip reprovisioning if
+both registered callbacks already match; otherwise provision replacements
+rather than resetting a database. No user can register a client through the
+public HTTP API.
 
 Decrypt, edit, and re-encrypt each affected environment:
 
@@ -137,46 +148,85 @@ The Reading root command reuses its existing PostgreSQL Compose project.
 Run schema migrations only when needed for an existing database, after a
 backup. For a **new** Bidding development database only, initialize its
 schema with `bun run db:push`; do not push over populated data casually.
+Back up Central Identity data before migrations or other risky database
+operations. From `book-auth-middleware/`:
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null exec -T db pg_dump -U central -d central --format=custom > central-before-migration.dump
+pg_restore --list central-before-migration.dump
+```
+
+Keep `.env.keys` backed up outside Git. Back up Book Bidding and Read in Peace
+databases separately using their existing operator procedures. Never use
+`down -v`, reseed, or push schema over populated application data just to test
+SSO.
+
+An existing application user without a valid Identity Link must use Reviewed
+Recovery; matching email is not proof of ownership. Central Identity recovery
+may require separate Google/GitHub recovery client registrations and exact
+callbacks. Provider consent and external OAuth behavior depend on operator
+setup and are not claimed as live-tested here. Follow Central Identity's
+documented reviewed recovery procedure; do not merge accounts or copy secrets
+into this workflow document.
+
+The recovery callback is registered alongside each app's regular sign-in
+callback when provisioning its Central OIDC client. The two callbacks must
+match the exact HTTPS origins and paths listed above. Keep each app's client
+secret private in its encrypted local environment.
 Do not visit the apps on `localhost:5173` or `localhost:3001` for SSO:
 use their public HTTPS origins so callback URLs and cookies match.
 
-## 4. Test the browser flow
+## 4. Verify the browser flow
 
-Use a fresh browser profile and test identities you control:
+Use a browser that trusts Caddy's local root CA. The verified development flow
+uses these entry points:
 
-1. Open `https://bidding.127.0.0.1.sslip.io:8080/dashboard`. Choose
-   **Continue with Central Identity** at sign-in, then Google or GitHub
-   at Central. Complete the real provider consent. Confirm the browser
-   returns to Book Bidding and `/api/auth/get-session` on its host reports
-   an Application Session.
-2. Open `https://reading.lvh.me:8080/dashboard` in the **same browser profile**.
-   Choose **Continue with Central Identity**. Confirm the protected Reading
-   destination opens without a second Google/GitHub prompt. Its session is
-   separate from Bidding's.
-3. In a separate clean browser profile, try the *other* provider with the
-   same verified email as an existing Central Identity. It must not claim
-   that identity by email. Return to the original still-signed-in profile,
-   use **Link Google** or **Link GitHub** in Central's portal, then repeat
-   sign-in through that provider. Explicit linking can also use a different
-   verified email.
-4. Sign out from Central's portal in the original profile. Reload both
-   applications: their sessions must remain. Sign out from one application:
-   the other must remain signed in. A fresh Central authorization must show
-   Central sign-in; Google/GitHub may still retain their own sessions.
-5. To protect an existing application user, sign in **locally** first. Use
-   Book Bidding's **Identity Link** or Read in Peace's **Central Identity
-   link** action. Without that action, a same-email Central login must not
-   claim the existing application user or its data. Each app's local
-   password login remains available.
+1. Open `https://bidding.127.0.0.1.sslip.io:8080` and select **Sign In** in
+   the header. Complete credential sign-in or registration at Central Identity.
+   Confirm the browser returns to `/dashboard` and
+   `/api/auth/get-session` reports an authenticated Application Session.
+2. In the same browser profile, open
+   `https://reading.lvh.me:8080/dashboard` and select **Sign In** if redirected
+   there. Confirm Central Identity reuses its existing SSO Session without
+   prompting for credentials, then confirm Read in Peace has its own
+   authenticated Application Session.
+3. Sign out locally in one application and confirm only that Application
+   Session ends. End the Central SSO Session and do not expect it to revoke
+   either application's existing Application Session. A new authorization
+   requires Central sign-in again.
+4. Test unlinked-user recovery only through the reviewed process. A same-email
+   Central Identity must not claim an existing application user's records.
+   Retired local login endpoints must not establish application sessions.
 
-Central's development `/api/auth/sign-up/email`, `/api/auth/sign-in/email`,
-and password-reset endpoints return HTTP `410`; `/sign-up` redirects to
-OAuth sign-in. Existing Central password-only identities can link a provider
-from an unexpired Central session. Otherwise an operator uses reviewed
-recovery, not a public password or recovery form. See the exact private
-CLI command and provider-token precautions in the
-[Central README](../README.md#reviewed-recovery). Never run recovery on a
-real person's identity merely to exercise this workflow.
+5. For repeatable Book Bidding browser coverage, use a dedicated, verified
+   development Central Identity. From `book-bidding/`, enter credentials
+   without adding the password to shell history:
+
+   ```sh
+   read -r -p "Central Identity test email: " CENTRAL_IDENTITY_TEST_EMAIL
+   read -r -s -p "Central Identity test password: " CENTRAL_IDENTITY_TEST_PASSWORD
+   printf '\n'
+   export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
+   BIDDING_OIDC_TEST_ORIGIN=https://bidding.127.0.0.1.sslip.io:8080 \
+     CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.127.0.0.1.nip.io:8080 \
+     bun scripts/test-oidc-browser.ts
+   unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
+   ```
+
+   The browser test checks the protected-page return, local sign-out, and
+   fresh sign-in through the still-active Central SSO Session.
+
+The verified browser checks covered the Bidding header-to-Central-Identity
+callback and dashboard return, then the Read in Peace header-to-Central flow
+in the same browser context. Both `/api/auth/get-session` endpoints reported
+authenticated sessions. External Google/GitHub sign-in, provider consent, and
+provider-based recovery depend on operator registrations and were not
+live-tested; do not treat them as passed.
+
+Central's public HTTP integration suite covered password-reset
+anti-enumeration, Mailpit link delivery, token replay rejection, password
+change, and session revocation. Bidding's local legacy-login refusal and
+unlinked-user ownership checks are separate from these SSO browser checks.
 
 ## 5. Run available automated checks
 
@@ -186,40 +236,18 @@ From `book-auth-middleware/` while its HTTPS gateway is running:
 bun run typecheck
 bun run test
 bun run test:env
-NODE_EXTRA_CA_CERTS="$(realpath central-identity-root.crt)" TEST_PROVIDER_URL=https://auth.127.0.0.1.nip.io:8080 bun run --filter @central-identity/server test:integration
+NODE_EXTRA_CA_CERTS="$(realpath central-identity-root.crt)" TEST_PROVIDER_URL=https://auth.127.0.0.1.nip.io:8080 TEST_MAILPIT_URL=http://localhost:8025 bun run --filter @central-identity/server test:integration
 ```
-
-The public HTTP suite checks retired endpoints, readiness, and discovery.
-The provider-proof tests check verified email handling for operator recovery.
-Neither substitutes for the real Google/GitHub callback browser test above.
 
 From `book-bidding/`, run `bun run check && bun run test`.
 From `read-in-peace/`, run `npm run test:env`,
 `npm --prefix backend run test -- --runInBand`, and
 `npm --prefix frontend run test`. Do not use production data for tests.
 
-## Test-production later
+## Production later
 
-`dev:prod` is an isolated **local production-mode test**, not live production.
-Configure each repo's `.env.test-production.example` with separate Google,
-GitHub, OIDC client, database, and application secrets; encrypt the selected
-files with that repo's `env:encrypt:test-production` command (Reading uses
-`ENV_FILE=.env.test-production npm run env:encrypt`). Central uses a separate
-Compose project, Caddy CA, PostgreSQL volume, and gateway `:8081`; Bidding
-previews on `:5174`; Reading uses backend `:3100`, frontend `:3101`, and
-database `:5433`. Register test-prefixed provider and application callbacks
-before attempting a browser sign-in. Never load `.env.production` or reuse
-development credentials for this mode.
-
-Start each repo's `dev:prod` from its own root after its test credentials are
-configured. Export the test gateway's **different** CA from Central:
-
-```sh
-bunx dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml cp caddy:/data/caddy/pki/authorities/local/root.crt ./central-test-production-root.crt
-```
-
-Trust that CA in the browser. Set `NODE_EXTRA_CA_CERTS` to its absolute path
-when starting the test-production app processes. Repeat the same browser
-checks against `auth-test.127.0.0.1.nip.io:8081`,
-`bidding-test.127.0.0.1.sslip.io:8081`, and
-`reading-test.lvh.me:8081`. Live production remains unchanged.
+This workflow covers local development only. Production requires a separate
+deployment plan and verified domains, HTTPS, provider registrations, issuer
+and callback values, secret storage, data backups and restore, migrations,
+and rollback. Do not reuse development credentials or claim production
+readiness from these local checks.

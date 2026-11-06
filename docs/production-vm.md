@@ -10,13 +10,17 @@ Create the production env file from `.env.production.example` and populate every
 
 - `AUTH_DOMAIN=identity.<operator-domain>` and `BETTER_AUTH_URL=https://identity.<operator-domain>`
 - `READING_DOMAIN=reading.<operator-domain>`
-- `READING_OIDC_REDIRECT_URI=https://reading.<operator-domain>/api/auth/callback/central-identity`
-- `READING_OIDC_CLIENT_ID` and `READING_OIDC_CLIENT_SECRET` from the provisioned Reading relying party; register the exact callback above.
-- Keep the Book Bidding client separate from Reading: register `https://<bidding-host>/api/auth/callback/central-identity` for its distinct client and use the same client ID/secret in Central Identity and the Vercel Production runtime.
+- `READING_OIDC_REDIRECT_URI=https://reading.<operator-domain>/api/auth/callback/central-identity` and `READING_RECOVERY_OIDC_REDIRECT_URI=https://reading.<operator-domain>/api/identity-recovery/callback`.
+- `READING_OIDC_CLIENT_ID` and `READING_OIDC_CLIENT_SECRET` from the provisioned Reading relying party; register both exact callbacks above.
+- Keep the Book Bidding client separate from Reading: register `https://<bidding-host>/api/auth/callback/central-identity` and `https://<bidding-host>/api/identity-recovery/callback` for its distinct client. Configure `BIDDING_OIDC_REDIRECT_URI` and `BIDDING_RECOVERY_OIDC_REDIRECT_URI` to those exact URLs, then use the same client ID/secret in Central Identity and the Vercel Production runtime.
 - `READING_DATABASE_URL` must point to the Reading database using the Reading Postgres credentials. Keep provider `DATABASE_URL` and `POSTGRES_PASSWORD` separate from all Reading database credentials.
 - SMTP host, port, sender, authenticated username, and password; use the provider-supported authenticated TLS configuration.
 
-Live production keeps its existing invitation/password flow in this cutover; keep `ALLOW_SIGN_UP` unset. Do not enable production OAuth providers yet. A later production cutover must register `https://<AUTH_DOMAIN>/api/auth/callback/google` and `https://<AUTH_DOMAIN>/api/auth/callback/github`.
+Central Identity now accepts open username/email-password registration with
+required email verification. Existing invitation records remain stored but no
+longer control signup. Live production social-provider and relying-party
+cutover remains unverified: keep Google/GitHub disabled until their separate
+callback, SMTP, issuer, backup, and rollback checks pass.
 
 ## Operator go-live checklist
 
@@ -25,7 +29,7 @@ Before declaring public production success, require:
 - Verified, restorable backups for Central Identity, Read in Peace, and Book Bidding's operator-owned database; test restores in isolation.
 - Owned DNS and valid HTTPS for all three application hosts.
 - Separate Central Identity client IDs and secrets for Bidding and Reading, with each exact HTTPS callback registered.
-- Successful existing invitation/password sign-in and three-app SSO checks.
+- Successful verified credential signup, existing-identity sign-in, and three-app SSO checks.
 - Access to the Vercel Production environment and confirmation its protected runtime values match the approved Bidding client and Central Identity issuer.
 - A three-app sign-in and sign-out check covering local Application Sessions and Central SSO Session boundaries.
 
