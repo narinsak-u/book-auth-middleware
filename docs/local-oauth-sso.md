@@ -40,7 +40,6 @@ verify Windows browser trust or full RP SSO. If trust, Linux hostname
 resolution, Docker health, or Chromium is missing, it exits with the required
 manual steps instead of claiming success.
 
-
 Each RP development command defaults `NODE_EXTRA_CA_CERTS` to the sibling
 Central Identity public root. From the Central Identity checkout, run Book
 Bidding in a second terminal:

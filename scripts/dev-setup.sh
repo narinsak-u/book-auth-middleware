@@ -70,6 +70,9 @@ if ((wsl)); then
   fi
 fi
 
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
 "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt "$tmp"
 if [[ ! -s "$tmp" ]] || ! openssl x509 -in "$tmp" -noout -subject >/dev/null 2>&1; then
   echo 'Caddy public CA root is missing or invalid. Check Caddy logs; do not remove its volume.' >&2
