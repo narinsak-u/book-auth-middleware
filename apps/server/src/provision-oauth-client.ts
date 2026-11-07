@@ -1,26 +1,26 @@
 import { closeDatabase } from "@central-identity/db";
 
 export function validateOAuthRedirectURIs(redirectURIs: string[]) {
-  if (redirectURIs.length !== 2) throw new Error("OAuth clients require exactly one sign-in and one recovery callback");
+  if (redirectURIs.length < 1 || redirectURIs.length > 2) {
+    throw new Error("OAuth clients require one sign-in callback and at most one recovery callback");
+  }
   const callbacks = redirectURIs.map((uri) => new URL(uri));
   if (
-    callbacks[0].protocol !== "https:" ||
-    callbacks[1].protocol !== "https:" ||
+    new Set(redirectURIs).size !== redirectURIs.length ||
     callbacks.some((url, index) =>
-      url.origin + url.pathname !== redirectURIs[index] || url.search || url.hash || url.username || url.password
+      url.protocol !== "https:" || url.origin + url.pathname !== redirectURIs[index] ||
+      url.search || url.hash || url.username || url.password
     ) ||
-    callbacks[0].origin !== callbacks[1].origin ||
-    callbacks[0].pathname !== "/api/auth/callback/central-identity" ||
-    callbacks[1].pathname !== "/api/identity-recovery/callback"
+    callbacks.some((url) => url.origin !== callbacks[0].origin)
   ) {
-    throw new Error("OAuth callbacks must be exact HTTPS URIs on one origin with the registered sign-in and recovery paths");
+    throw new Error("OAuth callbacks must be exact HTTPS URIs on one origin without query, fragment, or credentials");
   }
 }
 
 export async function provisionOAuthClient(clientName: string, emailPrefix: string, redirectURIs: string[]) {
   validateOAuthRedirectURIs(redirectURIs);
   // Dynamic import is required so this privilege is set before auth initializes.
-  process.env.BIDDING_OIDC_PROVISIONING = "true";
+  process.env.OIDC_CLIENT_PROVISIONING = "true";
   const { auth } = await import("./auth");
   const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.localhost:8080";
 

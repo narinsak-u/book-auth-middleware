@@ -295,7 +295,15 @@ bunx dotenvx run --strict --overload -f .env.development -- docker compose --env
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null run --rm --no-deps auth bun run provision:bidding
 ```
 
-The command prints a one-time client ID and secret plus both registered callbacks. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. The provider loads its ID into the trusted-client cache on startup. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled.
+The command prints a one-time client ID and secret plus both registered callbacks. Before starting the provider, set only the printed client ID as `BIDDING_OIDC_CLIENT_ID` with `bunx dotenvx set BIDDING_OIDC_CLIENT_ID '<id>' -f .env.development`. From `../book-bidding`, use dotenvx to set `CENTRAL_OIDC_CLIENT_ID` and `CENTRAL_OIDC_CLIENT_SECRET` in its encrypted `.env.development`. Keep `.env.keys` private and never commit or paste the client secret. Provisioning marks this first-party client `skip_consent: true`; untrusted clients are not provisioned. The CLI uses and removes a random temporary identity to authenticate its privileged client creation. Ordinary users cannot manage OAuth clients, and dynamic registration is disabled. Each authorization and token request checks the persisted client record, so disabling takes effect without restarting the provider.
+
+Disable one client by its ID with the operator CLI:
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null run --rm --no-deps auth bun run disable:client '<client-id>'
+```
+
+The command retains the client record and credentials. It blocks new authorization and token exchange for that client, without ending Application Sessions, revoking issued tokens, or affecting other clients.
 
 Start the provider and TLS proxy:
 
@@ -395,63 +403,13 @@ Wait until PostgreSQL is healthy again before resuming requests.
 
 ## Production VM
 
-The committed `.env.development` and `.env.production` are ciphertext, not
-Compose env files. `.env.production` intentionally has no deployable domain,
-database password, authentication secret, or SMTP credentials until the
-operator supplies them. `.env.development.example` and
-`.env.production.example` list the respective settings. Keep `.env.keys`
-outside Git and back it up in a secure store; a fresh clone needs the
-development key to run locally. Put **only** the production key entry from
-`.env.keys` on the VM, readable solely by the deployment account. Never copy
-the development key to production.
+Central Identity and Read in Peace run as separate Compose projects with separate PostgreSQL owners. Neutral `sso-edge` owns host Caddy, trusted public TLS, and ingress. Book Bidding remains on Vercel. The optional local gateway remains unchanged. See [`docs/production-vm.md`](docs/production-vm.md) for operator inventory, backup/restore gates, exact independent startup, ingress transfer, and rollback.
 
-Configure `AUTH_DOMAIN` as the public hostname, `BETTER_AUTH_URL` as
-`https://<AUTH_DOMAIN>`, a strong `BETTER_AUTH_SECRET`, a distinct
-`POSTGRES_PASSWORD`, and a matching `DATABASE_URL` using the `db` hostname.
-Use an authenticated SMTP relay with `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`,
-`SMTP_USER`, and `SMTP_PASSWORD`. Port 465 uses implicit TLS; other ports
-require STARTTLS. Use `bunx dotenvx set KEY value -f .env.production` to
-encrypt each setting and commit the encrypted file; keep secrets out of
-shell history and command transcripts. DNS must point `AUTH_DOMAIN` to the VM,
-and inbound TCP 80/443 (plus UDP 443 for HTTP/3) must reach Caddy to obtain a
-public TLS certificate. Do not publish PostgreSQL or SMTP ports.
+Use `.env.identity.production.example` to prepare Central Identity's protected runtime environment. Preserve the exact existing provider database volume with `IDENTITY_DB_VOLUME`; its Compose declaration is external and refuses a missing volume. Reading separately preserves the existing external `READING_DB_VOLUME`. Stop each old PostgreSQL owner before mounting its same volume from its independent project. Never seed, substitute volumes, run two PostgreSQL containers on one volume, expose database ports, or use `down -v` on operator projects.
 
-After securely placing the production decryption key on the VM, start the
-isolated production stack:
+Keep `.env.keys` outside Git and back up its production key in protected storage. Never copy the development key to production or print decrypted settings. DNS, public certificates, authenticated SMTP, Vercel production values, backups/restores, and cross-app browser SSO require operator verification; this repository does not claim they are live.
 
-```sh
-bun install --frozen-lockfile
-bunx dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml up --build -d
-bunx dotenvx run --strict --overload -f .env.production -- sh -c 'curl "https://$AUTH_DOMAIN/health/ready"'
-```
-
-The `--strict` flag prevents startup when decryption fails; Compose also
-rejects missing required settings. Images exclude env files and private keys;
-the production stack uses its own persistent PostgreSQL and Caddy volumes,
-real SMTP instead of Mailpit, and public TLS instead of Caddy's local CA.
-
-Central supports username/email-password registration with required email
-verification. Invitation records remain in `enrollment_invitation`; registration
-does not read or consume them. The production external-provider and issuer
-cutover remains a separate verified phase; Google and GitHub are not enabled by
-the current production configuration. The database migration only adds nullable
-username columns and a unique index, preserving all current identities.
-
-For production Relying Parties, set both the normal and recovery callback
-environment variables to their exact HTTPS URLs. Recovery callbacks must use
-`/api/identity-recovery/callback` on the same origin as the normal
-`/api/auth/callback/central-identity` callback. Run
-`bunx dotenvx run --strict --overload -f .env.production -- docker compose --env-file /dev/null -f compose.production.yaml run --rm --no-deps auth bun run provision:bidding`
-or `provision:reading` only after the separate production checks. Each command
-registers both callbacks. Capture each one-time client secret privately in the
-Relying Party's production secret store, add only its client ID to encrypted
-`.env.production`, and restart `auth` to load the trusted-client cache.
-Each Relying Party must use the issuer `https://<AUTH_DOMAIN>/api/auth` and
-its own production callback; local client IDs, secrets, and Application
-Sessions are not portable between environments.
-
-Back up PostgreSQL before migrations; `down` preserves production volumes,
-while `down -v` destroys database and certificate state.
+Approve distinct production OIDC clients only after confirming exact HTTPS callbacks. Provisioning persists approval dynamically; no provider restart is required. Keep one-time secrets in each relying party's protected backend secret store. Read the full cutover gates and rollback steps in `docs/production-vm.md`.
 
 ## Database changes
 

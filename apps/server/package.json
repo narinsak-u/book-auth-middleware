@@ -10,8 +10,10 @@
     "start": "bun src/index.ts",
     "disable:central-identity": "bun src/disable-central-identity.ts",
     "recover-identity": "bun src/recover-identity.ts",
+    "provision:client": "bun src/provision-client.ts",
     "provision:bidding": "bun src/provision-bidding.ts",
     "provision:reading": "bun src/provision-reading.ts",
+    "disable:client": "bun src/disable-client.ts",
     "retarget:oauth-client": "bun src/retarget-oauth-client.ts"
   },
   "dependencies": {

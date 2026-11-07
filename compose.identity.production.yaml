@@ -1,0 +1,76 @@
+name: ${COMPOSE_PROJECT_NAME:-central-identity-production}
+
+services:
+  db:
+    image: postgres:17.5-alpine
+    environment:
+      POSTGRES_DB: central
+      POSTGRES_USER: central
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - production-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [identity]
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: auth
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      AUTH_DOMAIN: ${AUTH_DOMAIN:?AUTH_DOMAIN is required}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is required}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is required}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:${IDENTITY_AUTH_PORT:-3000}:3000"
+    networks: [identity]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/sign-in').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:${IDENTITY_PORT:-3001}:3001"
+    networks: [identity]
+    restart: unless-stopped
+
+networks:
+  identity:
+    name: ${COMPOSE_PROJECT_NAME:-central-identity-production}
+
+volumes:
+  production-db:
+    name: ${IDENTITY_DB_VOLUME:?Set IDENTITY_DB_VOLUME to the verified existing Central Identity volume}
+    external: true
