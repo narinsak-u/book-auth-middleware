@@ -291,10 +291,9 @@ From `read-in-peace/`, run `npm run test:env`,
 `npm --prefix backend run test -- --runInBand`, and
 `npm --prefix frontend run test`. Do not use production data for tests.
 
-## Production later
+## Production deployment
 
-This workflow covers local development only. Production requires a separate
-deployment plan and verified domains, HTTPS, provider registrations, issuer
-and callback values, secret storage, data backups and restore, migrations,
-and rollback. Do not reuse development credentials or claim production
-readiness from these local checks.
+Local checks do not establish production readiness. Use
+[`production-vm.md`](production-vm.md) for the current separate-deployment
+cutover, verified domains, HTTPS, provider registrations, secret storage,
+backups, migrations, and rollback gates.

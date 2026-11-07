@@ -1,7 +1,7 @@
 # Central Identity — Authentication Portal v2
 
-**Status:** historical implementation plan; superseded by ADR-0002 and the current README  
-**Scope:** original v2 portal delivery; not current Central authentication behavior
+**Status:** historical implementation plan; not current implementation guidance  
+**Scope:** original v2 portal delivery; superseded by ADR-0003 and current operator documentation
 
 ## 1. Goal and existing baseline
 
