@@ -41,8 +41,8 @@ if ! resolve_loopback; then
     echo 'Add this line to the active host resolver, then rerun bun run dev:setup:' >&2
     echo '127.0.0.1 auth.localhost' >&2
     if ((wsl)); then
-      echo 'Add it to both WSL /etc/hosts and Windows %SystemRoot%\\System32\\drivers\\etc\\hosts.' >&2
-      echo 'WSL may regenerate /etc/hosts at restart; rerun setup if resolution fails.' >&2
+      echo 'Add this line to the WSL host resolver; do not add it to Windows hosts unless the Windows browser cannot resolve the name.' >&2
+      echo 'WSL may regenerate /etc/hosts at restart; rerun setup if Linux resolution fails.' >&2
     fi
     exit 1
   fi
@@ -52,9 +52,24 @@ if ! resolve_loopback; then
   echo 'auth.localhost still does not resolve to loopback; check the active resolver and retry.' >&2
   exit 1
 fi
+if ((wsl)); then
+  if ! command -v powershell.exe >/dev/null 2>&1; then
+    echo 'Windows DNS lookup unavailable: install/use Windows PowerShell, then run: [System.Net.Dns]::GetHostAddresses("auth.localhost")'
+    echo 'Open https://auth.localhost:8080/api/auth/.well-known/openid-configuration in the Windows browser; add 127.0.0.1 auth.localhost to Windows hosts only if it cannot resolve the name.'
+  elif windows_lookup=$(powershell.exe -NoProfile -NonInteractive -Command 'try { $addresses = [System.Net.Dns]::GetHostAddresses("auth.localhost"); if ($addresses.Count -gt 0 -and @($addresses | Where-Object { -not [System.Net.IPAddress]::IsLoopback($_) }).Count -eq 0) { "LOOKUP_OK" } else { "LOOKUP_FAILED" } } catch { "LOOKUP_FAILED" }' 2>/dev/null); then
+    windows_lookup=${windows_lookup//$'\r'/}
+    if [[ "$windows_lookup" == *LOOKUP_OK* ]]; then
+      echo 'Windows DNS resolved auth.localhost to loopback.'
+    else
+      echo 'Windows DNS lookup failed. Open https://auth.localhost:8080/api/auth/.well-known/openid-configuration in the Windows browser; add 127.0.0.1 auth.localhost to Windows hosts only if it cannot resolve the name.'
+    fi
+  else
+    echo 'Windows DNS lookup unavailable because Windows PowerShell could not run through WSL interop.'
+    echo 'Run in Windows PowerShell: [System.Net.Dns]::GetHostAddresses("auth.localhost")'
+    echo 'Open https://auth.localhost:8080/api/auth/.well-known/openid-configuration in the Windows browser; add 127.0.0.1 auth.localhost to Windows hosts only if it cannot resolve the name.'
+  fi
+fi
 
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
 "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt "$tmp"
 if [[ ! -s "$tmp" ]] || ! openssl x509 -in "$tmp" -noout -subject >/dev/null 2>&1; then
   echo 'Caddy public CA root is missing or invalid. Check Caddy logs; do not remove its volume.' >&2
@@ -168,4 +183,5 @@ fi
   exit 1
 }
 
-echo 'Trusted local HTTPS and OIDC discovery verified; Chromium trusts the active Caddy CA.'
+echo 'Verified: trusted local HTTPS health, exact-issuer OIDC discovery, and Chromium discovery without a certificate bypass.'
+echo 'Not verified: full Bidding-to-Reading browser SSO. After both RPs are running and provisioned, run bun run test:oidc-browser from Book Bidding.'

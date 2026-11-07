@@ -14,14 +14,16 @@ the active Caddy public CA root to ignored `central-identity-root.crt`.
 Repeated runs reuse the active CA file unchanged. It does not replace Caddy's
 CA or modify database/client data.
 
-The command checks `auth.localhost` resolves to loopback. On Linux, if it
-does not, the command asks before using `sudo` to add
-`127.0.0.1 auth.localhost` to `/etc/hosts`. Declining prints that line for
-manual installation. On WSL, check the WSL and Windows resolvers separately;
-add a Windows hosts entry only if the Windows browser cannot resolve the name.
-WSL can regenerate `/etc/hosts` on restart; rerun setup and restore the entry
-if it disappears. Do not change WSL global resolver settings for this project.
-Windows browsers must reach the WSL-published loopback port.
+The command checks that `auth.localhost` resolves to loopback. On Linux, if it
+does not, the command asks before using `sudo` to add `127.0.0.1 auth.localhost`
+to `/etc/hosts`. Declining prints that line for manual installation. WSL also
+checks Windows DNS through PowerShell when WSL interop is available. A failed
+lookup and unavailable interop are reported separately with the Windows command
+to run manually. Setup never edits Windows hosts; add `127.0.0.1 auth.localhost`
+there only if the Windows browser cannot resolve the name. WSL can regenerate
+`/etc/hosts` on restart; rerun setup and restore the entry if resolution fails.
+Do not change WSL global resolver settings for this project. Windows browsers
+must reach the WSL-published loopback port.
 
 The command asks before installing the public CA into Linux's system trust
 store and the current user's Chromium certificate store. Linux system trust
@@ -32,10 +34,12 @@ PowerShell prompt to trust it for Windows browsers. Install `ca-certificates`
 if setup reports it missing. Never approve unattended elevation, disable TLS
 verification, or copy Caddy's private key.
 
-On success, setup confirms TLS and OIDC discovery with the exact HTTPS issuer,
-then opens the discovery endpoint in Chromium without a certificate bypass.
-If trust, hostname resolution, Docker health, or Chromium is missing, it exits
-with the required manual steps instead of claiming success.
+On success, setup confirms trusted HTTPS health, OIDC discovery with the exact
+HTTPS issuer, and Chromium discovery without a certificate bypass. It does not
+verify Windows browser trust or full RP SSO. If trust, Linux hostname
+resolution, Docker health, or Chromium is missing, it exits with the required
+manual steps instead of claiming success.
+
 
 Each RP development command defaults `NODE_EXTRA_CA_CERTS` to the sibling
 Central Identity public root. From the Central Identity checkout, run Book
@@ -122,7 +126,8 @@ Bidding's Application Session. An existing unlinked Application User requires
 Reviewed Recovery; matching email alone cannot claim it. Logout from either
 application leaves the other application and Central SSO Session active.
 
-Use `http://localhost:8025` to inspect local verification mail. Avoid test
-accounts and credentials from production. Run `bun run test:oidc-browser` from
-Book Bidding with its documented test account variables for the full browser
-check.
+Do not run the browser test during Central-only setup: both RPs must be running
+and provisioned first. After both apps are ready, `bun run test:oidc-browser`
+from Book Bidding is required to verify full Bidding-to-Reading browser SSO
+before claiming issue #55 acceptance. Use `http://localhost:8025` to inspect
+local verification mail. Avoid test accounts and credentials from production.
