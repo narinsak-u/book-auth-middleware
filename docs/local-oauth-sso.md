@@ -6,29 +6,57 @@ Book Bidding serves `http://localhost:5173`; Read in Peace serves
 on `http://localhost:3000`. Central Identity does not proxy either application.
 Production and test-production origins are separate and remain HTTPS.
 
-## Trust the IdP
+## Trusted HTTPS setup
 
-Start Central Identity with `bun run dev`. Export its **public** local CA root
-if `central-identity-root.crt` does not match the running Caddy volume:
+Run `bun run dev:setup` from the Central Identity checkout. It starts the
+existing development Compose stack without removing volumes and exports only
+the active Caddy public CA root to ignored `central-identity-root.crt`.
+Repeated runs reuse the active CA file unchanged. It does not replace Caddy's
+CA or modify database/client data.
+
+The command checks `auth.localhost` resolves to loopback. On Linux, if it
+does not, the command asks before using `sudo` to add
+`127.0.0.1 auth.localhost` to `/etc/hosts`. Declining prints that line for
+manual installation. On WSL, check both WSL and Windows name resolution;
+Windows and WSL hosts files must both contain the entry when WSL host generation
+does not already provide it. WSL can regenerate `/etc/hosts` on restart; rerun
+setup and restore the entry if it disappears. Do not change WSL global resolver
+settings for this project.
+Windows browsers must reach the WSL-published loopback port.
+
+The command offers to install the public CA into Linux's system trust store
+with explicit `sudo` approval. On WSL, Linux trust does not add trust to
+Windows; run the printed `Import-Certificate` command in an elevated
+PowerShell prompt to trust it for Windows browsers. On Debian/Ubuntu, install
+`ca-certificates` if setup reports it missing; Windows Root installation is
+separate from WSL trust.
+Never approve unattended elevation. Do not disable TLS verification or copy
+Caddy's private key.
+
+On success, setup confirms TLS and OIDC discovery with the exact HTTPS issuer,
+then opens the discovery endpoint in Chromium without a certificate bypass.
+If trust, hostname resolution, Docker health, or Chromium is missing, it exits
+with the required manual steps instead of claiming success.
+
+RP Node/Bun processes need the public CA as well. Set the documented runtime
+variable when starting each app:
 
 ```sh
-bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
-  docker compose --env-file /dev/null cp \
-  caddy:/data/caddy/pki/authorities/local/root.crt central-identity-root.crt
+cd ../book-bidding
+NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
+
+cd ../read-in-peace
+NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" npm run dev
 ```
 
-Trust that public certificate in the browser. Add `127.0.0.1 auth.localhost`
-to the resolver only if the browser or backend runtime cannot resolve it.
-On WSL, check both the WSL and Windows resolvers. Set `NODE_EXTRA_CA_CERTS`
-to this certificate for each Node-based RP process. Never disable TLS
-verification or copy Caddy's private key.
+The RP development scripts also default `NODE_EXTRA_CA_CERTS` to the sibling
+Central Identity export when available. Restart RP processes after CA changes.
 
-If `POST /api/auth/sign-in/social` returns 404, check IdP discovery from the
-RP host. Better Auth skips `central-identity` when discovery fails. On WSL,
-`getent hosts auth.localhost` must resolve; add `127.0.0.1 auth.localhost` to
-WSL's `/etc/hosts` if it does not. Refresh the public CA above whenever Caddy
-recreates its CA, then restart Book Bidding from its checkout with
-`NODE_EXTRA_CA_CERTS="$PWD/../book-auth-middleware/central-identity-root.crt" bun run dev`.
+If `POST /api/auth/sign-in/social` returns 404, check IdP discovery from the RP
+host. Better Auth skips `central-identity` when discovery fails. On WSL,
+`getent hosts auth.localhost` must resolve; if it does not, follow the explicit
+hosts-file prompt above. Refresh the public CA with `bun run dev:setup` after
+Caddy recreates its CA.
 
 ## Register callbacks
 

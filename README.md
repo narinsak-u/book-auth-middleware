@@ -57,44 +57,47 @@ operator CLI operation, not a public registration endpoint.
 ## Setup
 
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
-`read-in-peace/`. Install Bun 1.4.2 or newer and Docker Engine with Compose.
-Keep each repository's encrypted development environment and private dotenvx
-keys. Never share or commit keys, client secrets, or the Caddy CA private key.
-Port `8080` must be free.
+`read-in-peace/`. Install Bun 1.4.2 or newer, Docker Engine with Compose, and
+the repository's development dotenvx keys. Never share or commit keys, client
+secrets, or the Caddy CA private key. Port `8080` must be free.
 
-For first-time setup, configure host resolution, trust the local Caddy CA,
-provision separate OIDC clients, register exact callbacks, and set each RP's
-issuer and client credentials. Follow the
-[Development SSO workflow](docs/local-oauth-sso.md); it contains those
-repository-specific steps and callback values. Do not use production data or
-credentials for local tests.
+Run the repeatable HTTPS bootstrap from `book-auth-middleware/`:
+
+```sh
+bun run dev:setup
+```
+
+It starts the existing development Compose stack without removing volumes,
+exports only Caddy's active public CA into ignored `central-identity-root.crt`,
+and checks TLS, discovery, and Chromium trust. It does not provision clients
+or modify identities. If `auth.localhost` does not resolve to loopback, it
+offers an explicit, privileged `/etc/hosts` update; declining prints manual
+steps. On Linux it offers explicit system CA installation and needs `sudo`
+approval. In WSL, install the CA separately in the Windows Trusted Root store
+for Windows browsers; the script prints the required elevated PowerShell
+command. Never use TLS bypasses or copy Caddy's private key.
+
+Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision
+separate OIDC clients, register exact callbacks, and set each RP's issuer and
+client credentials. Do not use production data or credentials for local tests.
 
 ## Run local integration
 
-Start Central Identity from `book-auth-middleware/`:
-
-```sh
-bun install --frozen-lockfile
-bun run dev
-```
-
-Start Book Bidding in a second terminal:
+Run `bun run dev:setup` once from `book-auth-middleware/`. In separate
+terminals, start each RP from its own checkout:
 
 ```sh
 cd ../book-bidding
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
+bun run dev
 ```
-
-Start Read in Peace in a third terminal:
 
 ```sh
 cd ../read-in-peace
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" npm run dev
+npm run dev
 ```
 
-The browser and RP backends must trust the IdP's development CA. Only
-`auth.localhost` needs a host resolver entry if it does not resolve to
-`127.0.0.1`. The setup workflow explains CA trust and WSL-specific routing.
+The browser and RP backends must trust the IdP's development CA. The setup
+workflow configures the public CA and explains Linux, WSL, and Windows trust.
 
 Check Central Identity and OIDC discovery:
 
@@ -169,3 +172,4 @@ Central Identity, its RPs, and `sso-edge` deploy independently. Production
 ingress and rollback instructions are in the
 [`sso-edge` operations guide](../sso-edge/README.md). Local setup does not prove
 production DNS, TLS, backups, or SSO.
+

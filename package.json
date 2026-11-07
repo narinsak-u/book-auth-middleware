@@ -5,10 +5,11 @@
   "packageManager": "bun@1.4.2",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "dev:setup": "bash scripts/dev-setup.sh",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:env": "bun test tests/pre-commit.test.ts",
+    "test:env": "bun test tests/pre-commit.test.ts tests/export-public-ca.test.ts",
     "env:encrypt": "dotenvx encrypt -f .env.development -fk .env.keys",
     "env:decrypt": "dotenvx decrypt -f .env.development -fk .env.keys",
     "env:encrypt:development": "dotenvx encrypt -f .env.development -fk .env.keys",
