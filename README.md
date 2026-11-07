@@ -72,10 +72,12 @@ exports only Caddy's active public CA into ignored `central-identity-root.crt`,
 and checks TLS, discovery, and Chromium trust. It does not provision clients
 or modify identities. If `auth.localhost` does not resolve to loopback, it
 offers an explicit, privileged `/etc/hosts` update; declining prints manual
-steps. On Linux it offers explicit system CA installation and needs `sudo`
-approval. In WSL, install the CA separately in the Windows Trusted Root store
-for Windows browsers; the script prints the required elevated PowerShell
-command. Never use TLS bypasses or copy Caddy's private key.
+steps. On Linux it asks before installing the public CA in system trust with
+`sudo` and Chromium's user certificate store with `certutil`. Install
+`libnss3-tools` (or your distribution's `certutil`) if needed. In WSL, trust
+the public CA in Windows Trusted Root separately for Windows browsers; setup
+prints the elevated PowerShell command. Never use TLS bypasses or copy Caddy's
+private key.
 
 Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision
 separate OIDC clients, register exact callbacks, and set each RP's issuer and

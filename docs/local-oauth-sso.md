@@ -17,40 +17,44 @@ CA or modify database/client data.
 The command checks `auth.localhost` resolves to loopback. On Linux, if it
 does not, the command asks before using `sudo` to add
 `127.0.0.1 auth.localhost` to `/etc/hosts`. Declining prints that line for
-manual installation. On WSL, check both WSL and Windows name resolution;
-Windows and WSL hosts files must both contain the entry when WSL host generation
-does not already provide it. WSL can regenerate `/etc/hosts` on restart; rerun
-setup and restore the entry if it disappears. Do not change WSL global resolver
-settings for this project.
+manual installation. On WSL, check the WSL and Windows resolvers separately;
+add a Windows hosts entry only if the Windows browser cannot resolve the name.
+WSL can regenerate `/etc/hosts` on restart; rerun setup and restore the entry
+if it disappears. Do not change WSL global resolver settings for this project.
 Windows browsers must reach the WSL-published loopback port.
 
-The command offers to install the public CA into Linux's system trust store
-with explicit `sudo` approval. On WSL, Linux trust does not add trust to
+The command asks before installing the public CA into Linux's system trust
+store and the current user's Chromium certificate store. Linux system trust
+requires `sudo`; Chromium trust requires `certutil` (`libnss3-tools` on
+Debian/Ubuntu, `nss-tools` on Fedora). On WSL, Linux trust does not add trust to
 Windows; run the printed `Import-Certificate` command in an elevated
-PowerShell prompt to trust it for Windows browsers. On Debian/Ubuntu, install
-`ca-certificates` if setup reports it missing; Windows Root installation is
-separate from WSL trust.
-Never approve unattended elevation. Do not disable TLS verification or copy
-Caddy's private key.
+PowerShell prompt to trust it for Windows browsers. Install `ca-certificates`
+if setup reports it missing. Never approve unattended elevation, disable TLS
+verification, or copy Caddy's private key.
 
 On success, setup confirms TLS and OIDC discovery with the exact HTTPS issuer,
 then opens the discovery endpoint in Chromium without a certificate bypass.
 If trust, hostname resolution, Docker health, or Chromium is missing, it exits
 with the required manual steps instead of claiming success.
 
-RP Node/Bun processes need the public CA as well. Set the documented runtime
-variable when starting each app:
+Each RP development command defaults `NODE_EXTRA_CA_CERTS` to the sibling
+Central Identity public root. From the Central Identity checkout, run Book
+Bidding in a second terminal:
 
 ```sh
 cd ../book-bidding
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
-
-cd ../read-in-peace
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" npm run dev
+bun run dev
 ```
 
-The RP development scripts also default `NODE_EXTRA_CA_CERTS` to the sibling
-Central Identity export when available. Restart RP processes after CA changes.
+Run Read in Peace in a third terminal:
+
+```sh
+cd ../read-in-peace
+npm run dev
+```
+
+Set `NODE_EXTRA_CA_CERTS` explicitly only when using another public CA.
+Restart RP processes after CA changes.
 
 If `POST /api/auth/sign-in/social` returns 404, check IdP discovery from the RP
 host. Better Auth skips `central-identity` when discovery fails. On WSL,

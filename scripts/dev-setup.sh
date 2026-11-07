@@ -85,6 +85,40 @@ trust_linux_ca() {
 }
 
 trust_linux_ca
+trust_chromium_ca() {
+  local db="$HOME/.pki/nssdb"
+  local name='Central Identity local development'
+  local current installed
+  if ! command -v certutil >/dev/null 2>&1; then
+    echo 'Install libnss3-tools (Debian/Ubuntu) or nss-tools (Fedora) for Chromium CA trust, then rerun setup.' >&2
+    return 1
+  fi
+  mkdir -p "$db"
+  if [[ ! -f "$db/cert9.db" ]]; then
+    certutil -N --empty-password -d "sql:$db"
+  fi
+  current=$(openssl x509 -in "$root/central-identity-root.crt" -noout -fingerprint -sha256)
+  installed=$(certutil -L -d "sql:$db" -n "$name" -a 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null || true)
+  if [[ "$installed" == "$current" ]]; then
+    echo 'Public CA already trusted by Chromium.'
+    return
+  fi
+  if ! ask 'Trust this public CA in your Chromium user certificate store?'; then
+    echo 'Chromium trust is required; approve installation and rerun setup.' >&2
+    return 1
+  fi
+  if certutil -L -d "sql:$db" -n "$name" -a >/dev/null 2>&1; then
+    certutil -D -d "sql:$db" -n "$name"
+  fi
+  certutil -A -d "sql:$db" -n "$name" -t 'C,,' -i "$root/central-identity-root.crt"
+  installed=$(certutil -L -d "sql:$db" -n "$name" -a | openssl x509 -noout -fingerprint -sha256)
+  if [[ "$installed" != "$current" ]]; then
+    echo 'Chromium trust store did not retain the active Caddy CA.' >&2
+    return 1
+  fi
+}
+
+trust_chromium_ca
 if ((wsl)); then
   win_cert=$(wslpath -w "$root/central-identity-root.crt")
   echo 'Windows browsers need this public root in the Windows Trusted Root store.'
