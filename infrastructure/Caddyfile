@@ -12,14 +12,3 @@ auth.localhost:8080 {
     reverse_proxy web:3001
   }
 }
-
-bidding.localhost:8080 {
-  tls internal
-  reverse_proxy host.docker.internal:5173
-}
-
-reading.localhost:8080 {
-  tls internal
-  reverse_proxy host.docker.internal:3001
-}
-

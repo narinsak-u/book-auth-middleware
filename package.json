@@ -18,7 +18,7 @@
     "env:encrypt:test-production": "dotenvx encrypt -f .env.test-production -fk .env.test-production.keys",
     "env:decrypt:test-production": "dotenvx decrypt -f .env.test-production -fk .env.test-production.keys",
     "env:pre-commit": "bash scripts/pre-commit-env.sh",
-    "dev": "DEV_HOST_IP=\"$(sh scripts/dev-host-ip.sh)\" dotenvx run --strict --overload -f .env.development -fk .env.keys -- docker compose --env-file /dev/null up --build",
+    "dev": "dotenvx run --strict --overload -f .env.development -fk .env.keys -- docker compose --env-file /dev/null up --build",
     "dev:prod": "DEV_HOST_IP=\"$(sh scripts/dev-host-ip.sh)\" dotenvx run --strict -f .env.test-production -fk .env.test-production.keys -- docker compose --env-file /dev/null --project-name central-test-production -f compose.yaml -f compose.test-production.yaml up --build",
     "start": "bun run --filter @central-identity/server start",
     "web:dev": "bun run --filter @central-identity/web dev",

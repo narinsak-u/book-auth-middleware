@@ -1,6 +1,10 @@
 import { closeDatabase } from "@central-identity/db";
 
-export function validateOAuthRedirectURIs(redirectURIs: string[]) {
+export function allowedOAuthCallback(url: URL, production = process.env.NODE_ENV === "production" || process.env.TEST_PRODUCTION === "true") {
+  return url.protocol === "https:" || (!production && url.protocol === "http:" && url.hostname === "localhost");
+}
+
+export function validateOAuthRedirectURIs(redirectURIs: string[], production = process.env.NODE_ENV === "production" || process.env.TEST_PRODUCTION === "true") {
   if (redirectURIs.length < 1 || redirectURIs.length > 2) {
     throw new Error("OAuth clients require one sign-in callback and at most one recovery callback");
   }
@@ -8,12 +12,12 @@ export function validateOAuthRedirectURIs(redirectURIs: string[]) {
   if (
     new Set(redirectURIs).size !== redirectURIs.length ||
     callbacks.some((url, index) =>
-      url.protocol !== "https:" || url.origin + url.pathname !== redirectURIs[index] ||
+      !allowedOAuthCallback(url, production) || url.origin + url.pathname !== redirectURIs[index] ||
       url.search || url.hash || url.username || url.password
     ) ||
     callbacks.some((url) => url.origin !== callbacks[0].origin)
   ) {
-    throw new Error("OAuth callbacks must be exact HTTPS URIs on one origin without query, fragment, or credentials");
+    throw new Error("OAuth callbacks must be exact HTTPS URIs (or localhost HTTP in development) on one origin without query, fragment, or credentials");
   }
 }
 
@@ -55,7 +59,8 @@ export async function provisionOAuthClient(clientName: string, emailPrefix: stri
         headers: new Headers({ cookie: sessionCookie }),
         body: {
           client_name: clientName,
-          application_type: "web",
+          // Better Auth classifies HTTP loopback callbacks as native even for a server-side confidential client.
+          application_type: redirectURIs[0].startsWith("http://localhost:") ? "native" : "web",
           redirect_uris: redirectURIs,
           token_endpoint_auth_method: "client_secret_basic",
           grant_types: ["authorization_code"],

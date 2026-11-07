@@ -84,8 +84,6 @@ services:
       - ./infrastructure/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    extra_hosts:
-      - "host.docker.internal:${DEV_HOST_IP:-host-gateway}"
     depends_on:
       auth:
         condition: service_healthy

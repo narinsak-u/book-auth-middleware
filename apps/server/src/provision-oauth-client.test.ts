@@ -9,10 +9,21 @@ describe("owned OAuth callback registration", () => {
     expect(() => validateOAuthRedirectURIs([signInCallback])).not.toThrow();
     expect(() => validateOAuthRedirectURIs([signInCallback, recoveryCallback])).not.toThrow();
   });
+  test("accepts exact localhost HTTP callbacks only for local development", () => {
+    const callbacks = [
+      "http://localhost:5173/api/auth/callback/central-identity",
+      "http://localhost:5173/api/identity-recovery/callback",
+    ];
+    expect(() => validateOAuthRedirectURIs(callbacks)).not.toThrow();
+    expect(() => validateOAuthRedirectURIs(callbacks, true)).toThrow();
+  });
+
 
   test("rejects callbacks that are insecure, duplicate, extra, unsafe, or cross-origin", () => {
     for (const callbacks of [
       ["http://third.example.test/oidc/callback"],
+      ["http://127.0.0.1:5173/oidc/callback"],
+      ["http://other.localhost:5173/oidc/callback"],
       [signInCallback, signInCallback],
       [signInCallback, recoveryCallback, "https://third.example.test/extra"],
       [signInCallback, "https://other.example.test/recovery/callback"],

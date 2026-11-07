@@ -17,7 +17,7 @@ type OAuthClientAdapter = {
   updateMany: (change: {
     model: "oauthClient";
     where: { field: string; value: string | null }[];
-    update: { redirectUris: string[] };
+    update: { redirectUris: string[]; applicationType: "native" | "web" };
   }) => Promise<number>;
 };
 
@@ -48,7 +48,10 @@ async function retargetOAuthClient(
       { field: "name", value: clientName },
       { field: "userId", value: null },
     ],
-    update: { redirectUris: redirectURIs },
+    update: {
+      redirectUris: redirectURIs,
+      applicationType: redirectURIs[0].startsWith("http://localhost:") ? "native" : "web",
+    },
   });
   if (updated !== 1) throw new Error("OAuth client changed before its callbacks could be updated");
 }

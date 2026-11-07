@@ -12,23 +12,21 @@ each RP owns its users, application data, and Application Sessions.
 | Project | Role | Local development origin |
 | --- | --- | --- |
 | `book-auth-middleware` | Central Identity IdP, Authentication Portal, and local HTTPS gateway | `https://auth.localhost:8080` |
-| `book-bidding` | OIDC RP; keeps its own Application Sessions and data | `https://bidding.localhost:8080` |
-| `read-in-peace` | OIDC RP; keeps its own Application Sessions and data | `https://reading.localhost:8080` |
+| `book-bidding` | OIDC RP; keeps its own Application Sessions and data | `http://localhost:5173` |
+| `read-in-peace` | OIDC RP; keeps its own Application Sessions and data | `http://localhost:3001` |
 | `sso-edge` | Independent production HTTPS ingress; not part of local development | Production hostnames |
 
-The local gateway runs in Central Identity's Compose stack. It routes each HTTPS
-origin to that project's process. The applications are not merged into one
-Compose project or database.
+Central Identity's local Caddy serves only the IdP. Book Bidding and Read in
+Peace serve their own HTTP development origins; neither depends on that gateway.
+Their databases, callbacks, and Application Sessions stay separate.
 
 ```mermaid
 flowchart LR
     Browser -->|auth.localhost:8080| Gateway[Caddy in Central Identity Compose]
     Gateway -->|Portal pages| Portal[Authentication Portal]
     Gateway -->|OIDC, discovery, JWKS, health| IdP[Central Identity]
-    Browser -->|bidding.localhost:8080| Gateway
-    Gateway --> Bidding[Book Bidding RP :5173]
-    Browser -->|reading.localhost:8080| Gateway
-    Gateway --> Reading[Read in Peace RP :3000 / :3001]
+    Browser -->|localhost:5173| Bidding[Book Bidding RP]
+    Browser -->|localhost:3001| Reading[Read in Peace RP and own API proxy]
     IdP --> CentralDB[(Central Identity PostgreSQL)]
     Bidding --> BiddingData[(Book Bidding app data)]
     Reading --> ReadingData[(Read in Peace app database)]
@@ -94,8 +92,8 @@ cd ../read-in-peace
 NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" npm run dev
 ```
 
-The browser and Node processes must trust the development CA. Add the three
-`.localhost` names to the host resolver only if they do not resolve to
+The browser and RP backends must trust the IdP's development CA. Only
+`auth.localhost` needs a host resolver entry if it does not resolve to
 `127.0.0.1`. The setup workflow explains CA trust and WSL-specific routing.
 
 Check Central Identity and OIDC discovery:
@@ -106,8 +104,8 @@ curl --fail https://auth.localhost:8080/api/auth/.well-known/openid-configuratio
   | jq -e '.issuer == "https://auth.localhost:8080/api/auth"'
 ```
 
-Then open `https://bidding.localhost:8080` and sign in. In the same browser
-profile, open `https://reading.localhost:8080`. Read in Peace should reuse the
+Then open `http://localhost:5173` and sign in. In the same browser profile,
+open `http://localhost:3001`. Read in Peace should reuse the
 Central SSO Session but create its own Application Session. Signing out of one
 RP leaves the other RP's session active. Signing out of Central Identity
 requires authentication on the next authorization; it does not revoke existing
@@ -144,8 +142,8 @@ read -r -p "Central Identity test email: " CENTRAL_IDENTITY_TEST_EMAIL
 read -r -s -p "Central Identity test password: " CENTRAL_IDENTITY_TEST_PASSWORD
 printf '\n'
 export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
-BIDDING_OIDC_TEST_ORIGIN=https://bidding.localhost:8080 \
-  READING_OIDC_TEST_ORIGIN=https://reading.localhost:8080 \
+BIDDING_OIDC_TEST_ORIGIN=http://localhost:5173 \
+  READING_OIDC_TEST_ORIGIN=http://localhost:3001 \
   CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.localhost:8080 \
   bun run test:oidc-browser
 unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD

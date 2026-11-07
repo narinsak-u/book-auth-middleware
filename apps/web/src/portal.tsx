@@ -120,8 +120,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
           callbackURL,
         });
       if (result.error) throw result.error;
-      if (result.data?.url) window.location.assign(result.data.url);
-      else window.location.assign(callbackURL);
+      if (!result.data?.redirect) window.location.assign(result.data?.url ?? callbackURL);
     } catch {
       setError("That username or email and password did not match. Check them and try again.");
       setPending(false);
@@ -234,4 +233,3 @@ export function Enrollment() {
     <a href="/sign-in">Return to sign in</a>
   </section></main>;
 }
-

@@ -121,6 +121,27 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
     expect(token.status).toBeGreaterThanOrEqual(400);
     expect(await token.text()).toContain("not approved");
   });
+  test.skipIf(!relyingPartyClientId || !relyingPartyRedirectUri?.startsWith("http://localhost:"))(
+    "rejects an unregistered localhost callback port",
+    async () => {
+      const unregistered = new URL(relyingPartyRedirectUri!);
+      unregistered.port = "5999";
+      const authorize = new URL(`${provider}/api/auth/oauth2/authorize`);
+      authorize.search = new URLSearchParams({
+        response_type: "code",
+        client_id: relyingPartyClientId!,
+        redirect_uri: unregistered.toString(),
+        scope: "openid",
+        state: crypto.randomUUID(),
+        code_challenge: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        code_challenge_method: "S256",
+      }).toString();
+      const response = await fetch(authorize, { redirect: "manual" });
+      expect(response.status).toBe(302);
+      expect(new URL(response.headers.get("location")!, provider).searchParams.get("error")).toBe("invalid_redirect");
+    },
+  );
+
 
   test.skipIf(!unapprovedClientId)("rejects unapproved OAuth clients at public authorization and token endpoints", async () => {
     const authorize = new URL(`${provider}/api/auth/oauth2/authorize`);

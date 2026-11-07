@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { databaseReady, db, oauthClient, user } from "@central-identity/db";
 import { Elysia } from "elysia";
+import { allowedOAuthCallback } from "./provision-oauth-client";
 import { auth } from "./auth";
 
 const oauthEnabled = process.env.NODE_ENV !== "production" || process.env.TEST_PRODUCTION === "true";
@@ -54,7 +55,7 @@ const app = new Elysia()
       return { destination: null };
     }
     const destination = new URL(redirectUri);
-    if (destination.protocol !== "https:") {
+    if (!allowedOAuthCallback(destination)) {
       set.status = 400;
       return { destination: null };
     }

@@ -8,6 +8,7 @@ import nodemailer from "nodemailer";
 import { db } from "@central-identity/db";
 import * as schema from "@central-identity/db/schema";
 import { allowCredentialSignup } from "./enrollment-invitation";
+import { allowedOAuthCallback } from "./provision-oauth-client";
 const required = (name: string): string => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -188,6 +189,9 @@ export const auth = betterAuth({
       loginPage: "/sign-in",
       consentPage: "/oauth/consent",
       scopes: ["openid", "email", "profile"],
+      // Native loopback defaults allow any port; these RPs require exact registered callbacks.
+      validateRedirectUri: (uri, registeredUris) =>
+        registeredUris.includes(uri) && allowedOAuthCallback(new URL(uri)),
       clientPrivileges: async ({ action }) =>
         action === "create" && process.env.OIDC_CLIENT_PROVISIONING === "true",
     }),
