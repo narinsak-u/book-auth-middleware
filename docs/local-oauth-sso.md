@@ -293,7 +293,7 @@ From `read-in-peace/`, run `npm run test:env`,
 
 ## Production deployment
 
-Local checks do not establish production readiness. Use
-[`production-vm.md`](production-vm.md) for the current separate-deployment
-cutover, verified domains, HTTPS, provider registrations, secret storage,
-backups, migrations, and rollback gates.
+Local checks do not establish production readiness. Use the
+[neutral edge operations guide](../../sso-edge/README.md) for ingress setup and
+rollback. Each application owner must separately complete its deployment,
+database, backup, migration, secret, and provider-callback checks.
