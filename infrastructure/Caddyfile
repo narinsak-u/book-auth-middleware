@@ -1,9 +1,4 @@
-{
-  auto_https disable_redirects
-}
-
-auth.localhost:8080 {
-  tls internal
+http://localhost:8080 {
   @identity path /api/auth /api/auth/* /.well-known/* /oauth2/* /health /health/*
   handle @identity {
     reverse_proxy auth:3000

@@ -26,7 +26,7 @@ export async function provisionOAuthClient(clientName: string, emailPrefix: stri
   // Dynamic import is required so this privilege is set before auth initializes.
   process.env.OIDC_CLIENT_PROVISIONING = "true";
   const { auth } = await import("./auth");
-  const baseURL = process.env.BETTER_AUTH_URL ?? "https://auth.localhost:8080";
+  const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:8080";
 
   try {
     const context = await auth.$context;
