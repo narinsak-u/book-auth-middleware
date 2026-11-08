@@ -538,7 +538,14 @@ async function authPost(path: string, body: object) {
     expect(documentation.status).toBe(200);
     const spec = await documentation.json() as {
       paths: Record<string, Record<string, {
-        parameters?: { name: string; required?: boolean; example?: string }[];
+        summary?: string;
+        parameters?: { name: string; in?: string; required?: boolean; example?: string }[];
+        requestBody?: {
+          content?: Record<string, {
+            example?: Record<string, string>;
+            schema?: { required?: string[]; properties?: Record<string, unknown> };
+          }>;
+        };
         responses?: Record<string, { content?: Record<string, { schema?: { properties?: Record<string, unknown> } }> }>;
       }>>;
       servers?: { url: string }[];
@@ -555,6 +562,36 @@ async function authPost(path: string, body: object) {
       "/api/auth/.well-known/openid-configuration",
       "/api/auth/sign-in/social",
     ]) expect(spec.paths[path]).toBeUndefined();
+    const authOperations = [
+      ["/api/auth/sign-up/email", "post"],
+      ["/api/auth/sign-in/email", "post"],
+      ["/api/auth/send-verification-email", "post"],
+      ["/api/auth/verify-email", "get"],
+      ["/api/auth/request-password-reset", "post"],
+      ["/api/auth/reset-password", "post"],
+      ["/api/auth/get-session", "get"],
+      ["/api/auth/list-sessions", "get"],
+      ["/api/auth/sign-out", "post"],
+      ["/api/auth/revoke-session", "post"],
+      ["/api/auth/revoke-sessions", "post"],
+    ] as const;
+    for (const [path, method] of authOperations) expect(spec.paths[path]?.[method]).toBeDefined();
+
+    const signup = spec.paths["/api/auth/sign-up/email"].post?.requestBody?.content?.["application/json"];
+    expect(signup?.example).toEqual({
+      name: "Placeholder Person",
+      email: "person@example.invalid",
+      password: "PLACEHOLDER_PASSWORD",
+    });
+    const resetRequest = spec.paths["/api/auth/reset-password"].post?.requestBody?.content?.["application/json"];
+    expect(resetRequest?.schema?.required).toEqual(["newPassword"]);
+    expect(spec.paths["/api/auth/reset-password"].post?.parameters).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "token", in: "query", required: false })]),
+    );
+    for (const path of ["/api/auth/get-session", "/api/auth/list-sessions", "/api/auth/sign-out", "/api/auth/revoke-session", "/api/auth/revoke-sessions"]) {
+      expect(spec.paths[path][path.endsWith("sign-out") || path.endsWith("revoke-session") || path.endsWith("revoke-sessions") ? "post" : "get"]?.summary)
+        .toContain("Central SSO Session");
+    }
     expect(spec.paths["/api/auth/relying-party-destination"].get?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "client_id", required: true }),
