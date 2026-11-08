@@ -49,10 +49,15 @@ Use `http://localhost:8080` as the development API origin.
 | Discovery's `userinfo_endpoint` | Returns identity claims for a valid bearer access token. |
 | Discovery's `jwks_uri` | Publishes public signing keys so RPs can validate ID tokens. |
 
+Local development serves the Elysia-owned OpenAPI UI at `/openapi` and its JSON
+document at `/openapi/json`. The reference covers health, configuration, and
+Relying Party destination lookup. It excludes Better Auth and OIDC routes and is
+unavailable in production and test-production.
+
 The Authentication Portal serves sign-in, registration, and password recovery
-pages. Caddy routes portal pages to `web`; health, account, discovery, and OIDC
-API requests go to the Elysia/Better Auth server. Provisioning clients is an
-operator CLI operation, not a public registration endpoint.
+pages. Caddy routes portal pages to `web`; local health, OpenAPI, account,
+discovery, and OIDC API requests go to the Elysia/Better Auth server.
+Provisioning clients is an operator CLI operation, not a public registration endpoint.
 
 ## Setup
 

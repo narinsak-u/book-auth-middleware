@@ -475,6 +475,53 @@ async function authPost(path: string, body: object) {
     expect((await discovery.json()).issuer).toBe(`${provider}/api/auth`);
     expect((await fetch(`${provider}/health/ready`)).status).toBe(200);
   });
+  test("serves local OpenAPI documentation for Elysia-owned routes only", async () => {
+    const documentation = await fetch(`${provider}/openapi/json`);
+    expect(documentation.status).toBe(200);
+    const spec = await documentation.json() as {
+      paths: Record<string, Record<string, {
+        parameters?: { name: string; required?: boolean; example?: string }[];
+        responses?: Record<string, { content?: Record<string, { schema?: { properties?: Record<string, unknown> } }> }>;
+      }>>;
+      servers?: { url: string }[];
+    };
+    expect(Object.keys(spec.paths).sort()).toEqual([
+      "/api/auth/config",
+      "/api/auth/relying-party-destination",
+      "/health/live",
+      "/health/ready",
+    ]);
+    expect(spec.paths["/api/auth/relying-party-destination"].get?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "client_id", required: true }),
+        expect.objectContaining({ name: "redirect_uri", required: true }),
+      ]),
+    );
+    const destination = spec.paths["/api/auth/relying-party-destination"].get;
+    expect(destination?.responses?.["200"]?.content?.["application/json"]?.schema?.properties?.destination).toBeDefined();
+    expect(spec.paths["/api/auth/config"].get?.responses?.["200"]?.content?.["application/json"]?.schema?.properties?.oauthEnabled).toBeDefined();
+    expect(spec.paths["/health/live"].get?.responses?.["200"]?.content?.["application/json"]?.schema?.properties?.status).toBeDefined();
+    expect(spec.paths["/health/ready"].get?.responses?.["503"]?.content?.["application/json"]?.schema?.properties?.status).toBeDefined();
+    const ui = await fetch(`${provider}/openapi`);
+    expect(ui.status).toBe(200);
+    expect(ui.headers.get("content-type")).toContain("text/html");
+    expect(spec.servers).toEqual([{ url: "/" }]);
+    expect(destination?.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "client_id", required: true, example: "example-client-id" }),
+      expect.objectContaining({ name: "redirect_uri", required: true, example: "https://example.test/callback" }),
+    ]));
+    expect(await (await fetch(`${provider}/api/auth/config`)).json()).toEqual({ oauthEnabled: true });
+
+    const invalid = await fetch(`${provider}/api/auth/relying-party-destination?client_id=&redirect_uri=https%3A%2F%2Fexample.test%2Fcallback`);
+    expect(invalid.status).toBe(422);
+    expect(await invalid.json()).toMatchObject({ type: "validation" });
+  });
+});
+test.skipIf(!process.env.TEST_PRODUCTION_PROVIDER_URL)("does not expose OpenAPI in production-like mode", async () => {
+  for (const path of ["/openapi", "/openapi/json"]) {
+    const response = await fetch(`${process.env.TEST_PRODUCTION_PROVIDER_URL}${path}`);
+    expect(response.status).toBe(404);
+  }
 });
 describe.skipIf(!canTestRetarget)("OAuth client retarget integration", () => {
   test(
