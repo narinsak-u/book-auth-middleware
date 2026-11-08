@@ -20,11 +20,12 @@ test("commit encrypts staged config but refuses staged private keys or partial e
   copyFileSync(join(root, "package.json"), join(worktree, "package.json"));
   mkdirSync(join(worktree, "scripts"));
   copyFileSync(join(root, "scripts/pre-commit-env.sh"), join(worktree, "scripts/pre-commit-env.sh"));
+  copyFileSync(join(root, "scripts/env-all.sh"), join(worktree, "scripts/env-all.sh"));
   symlinkSync(join(root, "node_modules"), join(worktree, "node_modules"), "dir");
   expect(run("git", "init", "-q").code).toBe(0);
   writeFileSync(join(worktree, ".env.development"), "HELLO=secret-smoke-value\nCOMPOSE_PROJECT_NAME=\"book-auth-middleware\"\n");
-  expect(run("bun", "run", "env:encrypt:development").code).toBe(0);
-  expect(run("bun", "run", "env:decrypt:development").code).toBe(0);
+  expect(run("bun", "run", "dev:ec").code).toBe(0);
+  expect(run("bun", "run", "dev:dc").code).toBe(0);
   expect(run("git", "add", ".env.development").code).toBe(0);
   expect(run("sh", ".husky/pre-commit").code).toBe(0);
   const staged = run("git", "show", ":.env.development").stdout;
@@ -36,7 +37,7 @@ test("commit encrypts staged config but refuses staged private keys or partial e
   writeFileSync(join(worktree, ".env.development"), staged);
 
   writeFileSync(join(worktree, ".env.test-production"), "VALUE=test-production-secret\n");
-  expect(run("bun", "run", "env:encrypt:test-production").code).toBe(0);
+  expect(run("dotenvx", "encrypt", "-f", ".env.test-production", "-fk", ".env.test-production.keys").code).toBe(0);
   expect(run("git", "add", ".env.test-production").code).toBe(0);
   const testProductionHook = run("sh", ".husky/pre-commit");
   expect(testProductionHook.code, testProductionHook.stderr).toBe(0);
@@ -45,11 +46,20 @@ test("commit encrypts staged config but refuses staged private keys or partial e
   expect(testProduction).not.toContain("test-production-secret");
 
   writeFileSync(join(worktree, ".env.production"), "VALUE=production-secret\n");
-  expect(run("bun", "run", "env:encrypt:production").code).toBe(0);
+  expect(run("dotenvx", "encrypt", "-f", ".env.production", "-fk", ".env.keys").code).toBe(0);
   expect(run("git", "add", ".env.production").code).toBe(0);
   const productionHook = run("sh", ".husky/pre-commit");
   expect(productionHook.code, productionHook.stderr).toBe(0);
   expect(run("git", "show", ":.env.production").stdout).not.toContain("production-secret");
+  expect(run("bun", "run", "all:dc").code).toBe(0);
+  expect(readFileSync(join(worktree, ".env.development"), "utf8")).toContain("secret-smoke-value");
+  expect(readFileSync(join(worktree, ".env.test-production"), "utf8")).toContain("test-production-secret");
+  expect(readFileSync(join(worktree, ".env.production"), "utf8")).toContain("production-secret");
+  expect(run("bun", "run", "all:ec").code).toBe(0);
+  expect(readFileSync(join(worktree, ".env.development"), "utf8")).not.toContain("secret-smoke-value");
+  expect(readFileSync(join(worktree, ".env.test-production"), "utf8")).not.toContain("test-production-secret");
+  expect(readFileSync(join(worktree, ".env.production"), "utf8")).not.toContain("production-secret");
+  expect(run("git", "add", ".env.development", ".env.production", ".env.test-production").code).toBe(0);
 
   expect(run("git", "add", "-f", ".env.test-production.keys").code).toBe(0);
   expect(run("sh", ".husky/pre-commit").stderr).toContain("Refusing to commit dotenvx private keys");

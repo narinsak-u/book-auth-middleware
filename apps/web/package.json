@@ -5,7 +5,7 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc --noEmit -p ../../tsconfig.json",
-    "dev": "vite --host 0.0.0.0",
+    "dev": "vite",
     "start": "bun run build && bun run server",
     "server": "bun server.ts"
   },

@@ -72,6 +72,6 @@ const app = new Elysia()
     }
   })
   .mount(auth.handler)
-  .listen({ hostname: "0.0.0.0", port: Number(process.env.PORT ?? 3000) });
+  .listen({ hostname: process.env.HOST ?? "0.0.0.0", port: Number(process.env.PORT ?? 3000) });
 
 console.log(`Central Identity listening on ${app.server?.hostname}:${app.server?.port}`);

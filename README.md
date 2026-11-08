@@ -59,28 +59,46 @@ operator CLI operation, not a public registration endpoint.
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
 `read-in-peace/`. Install Bun 1.4.2 or newer, Docker Engine with Compose, and
 the repository's development dotenvx keys. Never share or commit keys or client
-secrets. Port `8080` must be free.
+secrets. Port `8080` must be free. Bun mode also uses loopback ports `5432` and `1025`.
 
-Run the ordinary development stack from `book-auth-middleware/`:
+## Development modes
+
+Choose one mode at a time. Both use `http://localhost:8080`; do not run them together.
+
+### Bun-hosted applications
+
+Start only PostgreSQL and Mailpit with Docker Compose:
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
+  docker compose --env-file /dev/null -f compose.yaml -f compose.bun.yaml up -d --wait db mailpit
+```
+
+Then run the backend and portal with Bun:
 
 ```sh
 bun run dev
 ```
 
-This serves Central Identity at `http://localhost:8080`, uses existing named
-database and service volumes, and does not alter client or identity data.
-Use email/password for local sign-in. Google and GitHub callbacks are deferred
-and unverified for this HTTP flow; do not rely on them.
-The gateway binds to loopback; do not expose this development stack to a network.
+This applies database migrations, runs the backend on `127.0.0.1:3080`, and serves the portal at `127.0.0.1:8080`. The portal proxies API requests to the backend. PostgreSQL and Mailpit bind to loopback only.
 
-Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision
-separate OIDC clients and register exact callbacks. Do not use production data
-or credentials for local tests.
+### Full Docker stack
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
+  docker compose --env-file /dev/null up --build
+```
+
+Compose runs all five services. Caddy serves `127.0.0.1:8080`; Postgres and Mailpit SMTP stay inside the Compose network.
+
+Both modes preserve existing named database and service volumes. Use email/password for local sign-in. Google and GitHub callbacks are deferred and unverified for this HTTP flow; do not rely on them. Do not expose development services to a network.
+
+Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision separate OIDC clients and register exact callbacks. Do not use production data or credentials for local tests.
 
 ## Run local integration
 
-Run `bun run dev` once from `book-auth-middleware/`. In separate
-terminals, start each RP from its own checkout:
+After starting either Central Identity mode, start each RP from its own
+checkout in separate terminals:
 
 ```sh
 cd ../book-bidding
@@ -152,11 +170,19 @@ The browser test requires all three projects running and provisioned. It
 verifies live OIDC sign-in and RP session boundaries. It does not test
 Google/GitHub sign-in or account recovery.
 
+## Environment commands
+
+- `bun run dev:ec` and `bun run dev:dc` encrypt or decrypt `.env.development`.
+- `bun run all:ec` and `bun run all:dc` encrypt or decrypt development, production, and test-production files.
+- `all:*` requires all three environment files plus `.env.keys` and `.env.test-production.keys`.
+- Decrypt commands write plaintext files. Keep them local; never commit plaintext secrets.
+
 Stop the app processes with Ctrl+C. Stop Central Identity without deleting its
 persistent database or service volumes:
 
 ```sh
-bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null down
+bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
+  docker compose --env-file /dev/null -f compose.yaml -f compose.bun.yaml down
 ```
 
 Do not add `-v` unless intentionally deleting local database and service data.
