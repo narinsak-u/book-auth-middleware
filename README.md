@@ -11,18 +11,18 @@ each RP owns its users, application data, and Application Sessions.
 
 | Project | Role | Local development origin |
 | --- | --- | --- |
-| `book-auth-middleware` | Central Identity IdP, Authentication Portal, and local HTTPS gateway | `https://auth.localhost:8080` |
+| `book-auth-middleware` | Central Identity IdP, Authentication Portal, and local HTTP gateway | `http://localhost:8080` |
 | `book-bidding` | OIDC RP; keeps its own Application Sessions and data | `http://localhost:5173` |
 | `read-in-peace` | OIDC RP; keeps its own Application Sessions and data | `http://localhost:3001` |
 | `sso-edge` | Independent production HTTPS ingress; not part of local development | Production hostnames |
 
-Central Identity's local Caddy serves only the IdP. Book Bidding and Read in
-Peace serve their own HTTP development origins; neither depends on that gateway.
-Their databases, callbacks, and Application Sessions stay separate.
+Central Identity's local Caddy serves only the IdP at `http://localhost:8080`.
+Book Bidding and Read in Peace serve their own HTTP development origins; both
+share `localhost` cookies with the IdP only when cookie names differ.
 
 ```mermaid
 flowchart LR
-    Browser -->|auth.localhost:8080| Gateway[Caddy in Central Identity Compose]
+    Browser -->|localhost:8080| Gateway[Caddy in Central Identity Compose]
     Gateway -->|Portal pages| Portal[Authentication Portal]
     Gateway -->|OIDC, discovery, JWKS, health| IdP[Central Identity]
     Browser -->|localhost:5173| Bidding[Book Bidding RP]
@@ -34,7 +34,7 @@ flowchart LR
 
 ## API endpoints
 
-Use `https://auth.localhost:8080` as the development API origin.
+Use `http://localhost:8080` as the development API origin.
 
 | Endpoint | Responsibility |
 | --- | --- |
@@ -57,51 +57,50 @@ operator CLI operation, not a public registration endpoint.
 ## Setup
 
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
-`read-in-peace/`. Install Bun 1.4.2 or newer and Docker Engine with Compose.
-Keep each repository's encrypted development environment and private dotenvx
-keys. Never share or commit keys, client secrets, or the Caddy CA private key.
-Port `8080` must be free.
+`read-in-peace/`. Install Bun 1.4.2 or newer, Docker Engine with Compose, and
+the repository's development dotenvx keys. Never share or commit keys or client
+secrets. Port `8080` must be free.
 
-For first-time setup, configure host resolution, trust the local Caddy CA,
-provision separate OIDC clients, register exact callbacks, and set each RP's
-issuer and client credentials. Follow the
-[Development SSO workflow](docs/local-oauth-sso.md); it contains those
-repository-specific steps and callback values. Do not use production data or
-credentials for local tests.
-
-## Run local integration
-
-Start Central Identity from `book-auth-middleware/`:
+Run the ordinary development stack from `book-auth-middleware/`:
 
 ```sh
-bun install --frozen-lockfile
 bun run dev
 ```
 
-Start Book Bidding in a second terminal:
+This serves Central Identity at `http://localhost:8080`, uses existing named
+database and service volumes, and does not alter client or identity data.
+Use email/password for local sign-in. Google and GitHub callbacks are deferred
+and unverified for this HTTP flow; do not rely on them.
+The gateway binds to loopback; do not expose this development stack to a network.
+
+Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision
+separate OIDC clients and register exact callbacks. Do not use production data
+or credentials for local tests.
+
+## Run local integration
+
+Run `bun run dev` once from `book-auth-middleware/`. In separate
+terminals, start each RP from its own checkout:
 
 ```sh
 cd ../book-bidding
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" bun run dev
+bun run dev
 ```
-
-Start Read in Peace in a third terminal:
 
 ```sh
 cd ../read-in-peace
-NODE_EXTRA_CA_CERTS="$(realpath ../book-auth-middleware/central-identity-root.crt)" npm run dev
+npm run dev
 ```
 
-The browser and RP backends must trust the IdP's development CA. Only
-`auth.localhost` needs a host resolver entry if it does not resolve to
-`127.0.0.1`. The setup workflow explains CA trust and WSL-specific routing.
+Central Identity and both RPs use HTTP localhost origins in development. No
+local CA or hostname setup is required.
 
 Check Central Identity and OIDC discovery:
 
 ```sh
-curl --fail https://auth.localhost:8080/health/ready
-curl --fail https://auth.localhost:8080/api/auth/.well-known/openid-configuration \
-  | jq -e '.issuer == "https://auth.localhost:8080/api/auth"'
+curl --fail http://localhost:8080/health/ready
+curl --fail http://localhost:8080/api/auth/.well-known/openid-configuration \
+  | jq -e '.issuer == "http://localhost:8080/api/auth"'
 ```
 
 Then open `http://localhost:5173` and sign in. In the same browser profile,
@@ -144,24 +143,23 @@ printf '\n'
 export CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
 BIDDING_OIDC_TEST_ORIGIN=http://localhost:5173 \
   READING_OIDC_TEST_ORIGIN=http://localhost:3001 \
-  CENTRAL_IDENTITY_TEST_ORIGIN=https://auth.localhost:8080 \
+  CENTRAL_IDENTITY_TEST_ORIGIN=http://localhost:8080 \
   bun run test:oidc-browser
 unset CENTRAL_IDENTITY_TEST_EMAIL CENTRAL_IDENTITY_TEST_PASSWORD
 ```
 
-The browser test requires all three projects running, provisioned clients, and a
-trusted CA. It verifies live OIDC sign-in and RP session boundaries. It does
-not test Google/GitHub sign-in or account recovery.
+The browser test requires all three projects running and provisioned. It
+verifies live OIDC sign-in and RP session boundaries. It does not test
+Google/GitHub sign-in or account recovery.
 
 Stop the app processes with Ctrl+C. Stop Central Identity without deleting its
-persistent database or CA volumes:
+persistent database or service volumes:
 
 ```sh
 bunx dotenvx run --strict --overload -f .env.development -- docker compose --env-file /dev/null down
 ```
 
-Do not add `-v` unless intentionally deleting local data and the development
-CA.
+Do not add `-v` unless intentionally deleting local database and service data.
 
 ## Production
 

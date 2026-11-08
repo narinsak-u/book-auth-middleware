@@ -182,8 +182,12 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
       const signIn = await authPost("sign-in/email", { email: testUserEmail!, password: testUserPassword! });
       expect(signIn.status).toBe(200);
       const signedInUser = (await signIn.json()).user;
-      const sessionCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
-      expect(sessionCookie).toContain("session_token=");
+      const cookieHeader = signIn.headers.get("set-cookie")!;
+      const sessionCookie = cookieHeader.split(";", 1)[0];
+      expect(sessionCookie).toContain(provider!.startsWith("http://")
+        ? "central-identity.session_token="
+        : "better-auth.session_token=");
+      expect(/(?:^|;\s*)secure(?:;|$)/i.test(cookieHeader)).toBe(provider!.startsWith("https://"));
 
       const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
       const codeVerifier = btoa(String.fromCharCode(...verifierBytes))

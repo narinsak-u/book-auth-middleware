@@ -20,7 +20,7 @@ const oauthEnabled = !production || testProduction;
 const productionRuntime = production && !testProduction;
 const baseURL = production
   ? required("BETTER_AUTH_URL")
-  : process.env.BETTER_AUTH_URL ?? "https://auth.localhost:8080";
+  : process.env.BETTER_AUTH_URL ?? "http://localhost:8080";
 const authSecret = production
   ? required("BETTER_AUTH_SECRET")
   : process.env.BETTER_AUTH_SECRET ?? "local-only-secret-change-before-deployment-32chars";
@@ -30,10 +30,10 @@ if (production) {
   }
   required("DATABASE_URL");
 }
-const googleClientId = oauthEnabled ? required("GOOGLE_CLIENT_ID") : undefined;
-const googleClientSecret = oauthEnabled ? required("GOOGLE_CLIENT_SECRET") : undefined;
-const githubClientId = oauthEnabled ? required("GITHUB_CLIENT_ID") : undefined;
-const githubClientSecret = oauthEnabled ? required("GITHUB_CLIENT_SECRET") : undefined;
+const googleClientId = testProduction ? required("GOOGLE_CLIENT_ID") : !production ? process.env.GOOGLE_CLIENT_ID : undefined;
+const googleClientSecret = testProduction ? required("GOOGLE_CLIENT_SECRET") : !production ? process.env.GOOGLE_CLIENT_SECRET : undefined;
+const githubClientId = testProduction ? required("GITHUB_CLIENT_ID") : !production ? process.env.GITHUB_CLIENT_ID : undefined;
+const githubClientSecret = testProduction ? required("GITHUB_CLIENT_SECRET") : !production ? process.env.GITHUB_CLIENT_SECRET : undefined;
 const smtpPort = Number(required("SMTP_PORT"));
 if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
   throw new Error("SMTP_PORT must be a valid TCP port");
@@ -54,7 +54,10 @@ export const auth = betterAuth({
   secret: authSecret,
   trustedOrigins: [baseURL],
   database: drizzleAdapter(db, { provider: "pg", schema }),
-  advanced: { useSecureCookies: true },
+  advanced: {
+    useSecureCookies: baseURL.startsWith("https:"),
+    ...(!production ? { cookiePrefix: "central-identity" } : {}),
+  },
   session: { expiresIn: 7 * 24 * 60 * 60 },
   rateLimit: {
     enabled: true,

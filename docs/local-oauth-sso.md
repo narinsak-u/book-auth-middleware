@@ -1,34 +1,32 @@
 # Independent local OIDC workflow
 
-Central Identity serves `https://auth.localhost:8080` through its own Caddy.
-Book Bidding serves `http://localhost:5173`; Read in Peace serves
-`http://localhost:3001` and proxies its own `/api/*` requests to its backend
-on `http://localhost:3000`. Central Identity does not proxy either application.
-Production and test-production origins are separate and remain HTTPS.
+Central Identity serves `http://localhost:8080`; its OIDC issuer is
+`http://localhost:8080/api/auth`. Book Bidding serves `http://localhost:5173`;
+Read in Peace serves `http://localhost:3001` and proxies its own `/api/*`
+requests to its backend on `http://localhost:3000`. Central Identity does not
+proxy either application. Production and test-production remain HTTPS.
 
-## Trust the IdP
+## Start Central Identity
 
-Start Central Identity with `bun run dev`. Export its **public** local CA root
-if `central-identity-root.crt` does not match the running Caddy volume:
+Run `bun run dev` from the Central Identity checkout. It starts the ordinary
+Compose stack at `http://localhost:8080`, binds the gateway to loopback, and
+preserves existing named volumes. No CA, hostname, or browser trust setup is
+required. Email/password sign-in is the supported local path. Google and GitHub
+callbacks are deferred and unverified for this HTTP flow; do not rely on them.
+
+Run Book Bidding in a second terminal:
 
 ```sh
-bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
-  docker compose --env-file /dev/null cp \
-  caddy:/data/caddy/pki/authorities/local/root.crt central-identity-root.crt
+cd ../book-bidding
+bun run dev
 ```
 
-Trust that public certificate in the browser. Add `127.0.0.1 auth.localhost`
-to the resolver only if the browser or backend runtime cannot resolve it.
-On WSL, check both the WSL and Windows resolvers. Set `NODE_EXTRA_CA_CERTS`
-to this certificate for each Node-based RP process. Never disable TLS
-verification or copy Caddy's private key.
+Run Read in Peace in a third terminal:
 
-If `POST /api/auth/sign-in/social` returns 404, check IdP discovery from the
-RP host. Better Auth skips `central-identity` when discovery fails. On WSL,
-`getent hosts auth.localhost` must resolve; add `127.0.0.1 auth.localhost` to
-WSL's `/etc/hosts` if it does not. Refresh the public CA above whenever Caddy
-recreates its CA, then restart Book Bidding from its checkout with
-`NODE_EXTRA_CA_CERTS="$PWD/../book-auth-middleware/central-identity-root.crt" bun run dev`.
+```sh
+cd ../read-in-peace
+npm run dev
+```
 
 ## Register callbacks
 
@@ -70,27 +68,28 @@ in Central Identity's encrypted development environment. Never put client
 secrets in public frontend variables or commit decrypted dotenv files.
 
 Use the issuer from discovery,
-`https://auth.localhost:8080/api/auth`, not the portal root URL. Both RPs
-use server-side code exchange, PKCE, and `client_secret_basic`. Localhost
-HTTP callbacks are allowed only in local development and only when registered
-exactly. Production rejects HTTP callbacks. Better Auth records development
-HTTP loopback clients as `native` because its `web` registration rejects them.
-They still authenticate at the token endpoint with a backend-held client secret
-and PKCE. Different cookie names keep the two `localhost` Application Sessions
-separate; ports do not isolate cookies.
+`http://localhost:8080/api/auth`, not the portal root URL. Both RPs use
+server-side code exchange, PKCE, and `client_secret_basic`. Localhost HTTP
+callbacks are allowed only in local development and only when registered
+exactly. Production and test-production reject HTTP callbacks. Better Auth
+records development HTTP loopback clients as `native` because its `web`
+registration rejects them. They still authenticate at the token endpoint with
+a backend-held client secret and PKCE. Central Identity uses its own cookie
+name so its HTTP SSO Session cannot collide with either RP's localhost cookies;
+ports do not isolate cookies.
 
 ## Exercise the flow
 
-Start each RP from its own checkout with `NODE_EXTRA_CA_CERTS` pointing to the
-IdP's public CA root; follow each RP README for its database and development
-process. Open `http://localhost:5173`, sign in with a verified Central
-Identity, then open `http://localhost:3001` in the same browser profile.
+Start each RP from its own checkout and follow its README for its database and
+development process. Open `http://localhost:5173`, sign in with a verified
+Central Identity, then open `http://localhost:3001` in the same browser profile.
 Read in Peace should reuse the Central SSO Session without sharing Book
 Bidding's Application Session. An existing unlinked Application User requires
 Reviewed Recovery; matching email alone cannot claim it. Logout from either
 application leaves the other application and Central SSO Session active.
 
-Use `http://localhost:8025` to inspect local verification mail. Avoid test
-accounts and credentials from production. Run `bun run test:oidc-browser` from
-Book Bidding with its documented test account variables for the full browser
-check.
+Do not run the browser test during Central-only setup: both RPs must be running
+and provisioned first. After both apps are ready, `bun run test:oidc-browser`
+from Book Bidding is required to verify full Bidding-to-Reading browser SSO
+before claiming issue #55 acceptance. Use `http://localhost:8025` to inspect
+local verification mail. Avoid test accounts and credentials from production.
