@@ -24,6 +24,50 @@ const disableClientSecret = process.env.TEST_DISABLE_RP_CLIENT_SECRET;
 const disableRedirectUri = process.env.TEST_DISABLE_RP_REDIRECT_URI;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
+  test("documents Better Auth account and session operations with safe local examples", async () => {
+    const response = await fetch(`${provider}/openapi/json`);
+    expect(response.status).toBe(200);
+    expect(new URL(response.url).origin).toBe(new URL(provider!).origin);
+    const document = await response.json() as {
+      servers: { url: string }[];
+      paths: Record<string, Record<string, {
+        requestBody?: { content?: { "application/json"?: { example?: Record<string, unknown> } } };
+      }>>;
+    };
+    expect(document.servers.some(({ url }) => url === "/")).toBe(true);
+    const paths = document.paths;
+    const documentedOperations = [
+      ["POST", "/api/auth/sign-up/email", "name", "email", "password"],
+      ["POST", "/api/auth/sign-in/email", "email", "password"],
+      ["POST", "/api/auth/send-verification-email", "email"],
+      ["POST", "/api/auth/request-password-reset", "email", "redirectTo"],
+      ["POST", "/api/auth/reset-password", "token", "newPassword"],
+      ["GET", "/api/auth/get-session"],
+      ["GET", "/api/auth/list-sessions"],
+      ["POST", "/api/auth/sign-out"],
+      ["POST", "/api/auth/revoke-session", "token"],
+      ["POST", "/api/auth/revoke-sessions"],
+    ] as const;
+    for (const [method, path, ...fields] of documentedOperations) {
+      const operation = paths[path]?.[method.toLowerCase()];
+      expect(operation, `${method} ${path}`).toBeDefined();
+      if (fields.length) {
+        const example = operation?.requestBody?.content?.["application/json"]?.example;
+        expect(example, `${method} ${path} example`).toBeDefined();
+        for (const field of fields) expect(example).toHaveProperty(field);
+        expect(JSON.stringify(example)).toMatch(/example\.invalid|PLACEHOLDER|placeholder/i);
+      }
+    }
+    const sessionResponse = await fetch(`${provider}/api/auth/get-session`);
+    expect(sessionResponse.status).toBe(200);
+    expect(await sessionResponse.json()).toBeNull();
+    for (const path of [
+      "/api/auth/oauth2/authorize",
+      "/api/auth/oauth2/token",
+      "/api/auth/.well-known/openid-configuration",
+      "/api/auth/sign-in/social",
+    ]) expect(paths[path]).toBeUndefined();
+  });
 
   test.skipIf(!mailpit)("requests password resets without disclosing account existence and rejects replay", async () => {
     const username = `recovery_${crypto.randomUUID().slice(0, 8)}`;
