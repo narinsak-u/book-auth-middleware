@@ -15,6 +15,7 @@ test("maps Compose-only dependency hosts to loopback for Bun development", () =>
   expect(environment.HOST).toBe("127.0.0.1");
   expect(environment.PORT).toBe("3080");
   expect(environment.BETTER_AUTH_URL).toBe("http://localhost:8080");
+  expect(environment.LOCAL_DEVELOPMENT).toBe("true");
 });
 
 test("preserves explicit development dependency hosts", () => {

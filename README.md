@@ -49,12 +49,13 @@ Use `http://localhost:8080` as the development API origin.
 | Discovery's `userinfo_endpoint` | Returns identity claims for a valid bearer access token. |
 | Discovery's `jwks_uri` | Publishes public signing keys so RPs can validate ID tokens. |
 
-Local development serves the Elysia-owned OpenAPI UI at `/openapi` and its JSON
-document at `/openapi/json`. The reference covers health, configuration,
-Relying Party destination lookup, Better Auth email/password account and
-session operations. Try it out uses the local backend origin. OIDC protocol
-and external-provider sign-in routes are excluded. The reference is unavailable
-in production and test-production.
+Local development serves the Elysia-owned OpenAPI UI at `/docs` and its JSON
+document at `/docs/json`. The reference covers health, configuration,
+Relying Party destination lookup, Better Auth email/password account (including
+email verification and password recovery), and session operations. Try it out
+uses the local backend origin. OIDC protocol and external-provider sign-in
+routes are excluded. The reference is available only in explicitly local
+development, not production, staging, or test-production.
 
 The Authentication Portal serves sign-in, registration, and password recovery
 pages. Caddy routes portal pages to `web`; local health, OpenAPI, account,

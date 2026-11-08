@@ -1,5 +1,5 @@
 http://localhost:8080 {
-  @identity path /api/auth /api/auth/* /.well-known/* /oauth2/* /health /health/* /openapi /openapi/*
+  @identity path /api/auth /api/auth/* /.well-known/* /oauth2/* /health /health/* /docs /docs/*
   handle @identity {
     reverse_proxy auth:3000
   }

@@ -25,13 +25,15 @@ const disableRedirectUri = process.env.TEST_DISABLE_RP_REDIRECT_URI;
 
 describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
   test("documents Better Auth account and session operations with safe local examples", async () => {
-    const response = await fetch(`${provider}/openapi/json`);
+    const response = await fetch(`${provider}/docs/json`);
     expect(response.status).toBe(200);
     expect(new URL(response.url).origin).toBe(new URL(provider!).origin);
     const document = await response.json() as {
       servers: { url: string }[];
       paths: Record<string, Record<string, {
-        requestBody?: { content?: { "application/json"?: { example?: Record<string, unknown> } } };
+        summary?: string;
+        parameters?: { name: string; in?: string; required?: boolean }[];
+        requestBody?: { required?: boolean; content?: { "application/json"?: { example?: Record<string, unknown>; schema?: { required?: string[]; properties?: Record<string, unknown> } } } };
       }>>;
     };
     expect(document.servers.some(({ url }) => url === "/")).toBe(true);
@@ -40,8 +42,9 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
       ["POST", "/api/auth/sign-up/email", "name", "email", "password"],
       ["POST", "/api/auth/sign-in/email", "email", "password"],
       ["POST", "/api/auth/send-verification-email", "email"],
-      ["POST", "/api/auth/request-password-reset", "email", "redirectTo"],
-      ["POST", "/api/auth/reset-password", "token", "newPassword"],
+      ["GET", "/api/auth/verify-email"],
+      ["POST", "/api/auth/request-password-reset", "email"],
+      ["POST", "/api/auth/reset-password", "newPassword"],
       ["GET", "/api/auth/get-session"],
       ["GET", "/api/auth/list-sessions"],
       ["POST", "/api/auth/sign-out"],
@@ -57,6 +60,17 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         for (const field of fields) expect(example).toHaveProperty(field);
         expect(JSON.stringify(example)).toMatch(/example\.invalid|PLACEHOLDER|placeholder/i);
       }
+    }
+    const resetRequest = paths["/api/auth/request-password-reset"].post;
+    expect(resetRequest?.requestBody?.content?.["application/json"]?.schema?.required).toEqual(["email"]);
+    expect(resetRequest?.requestBody?.content?.["application/json"]?.schema?.properties).toHaveProperty("redirectTo");
+    const reset = paths["/api/auth/reset-password"].post;
+    expect(reset?.parameters).toContainEqual(expect.objectContaining({ name: "token", in: "query" }));
+    expect(reset?.requestBody?.content?.["application/json"]?.schema?.properties).toHaveProperty("token");
+    expect(reset?.requestBody?.content?.["application/json"]?.schema?.required).toEqual(["newPassword"]);
+    expect(paths["/api/auth/verify-email"].get?.parameters).toContainEqual(expect.objectContaining({ name: "token", in: "query", required: true }));
+    for (const path of ["/api/auth/get-session", "/api/auth/list-sessions", "/api/auth/sign-out", "/api/auth/revoke-session", "/api/auth/revoke-sessions"]) {
+      expect(paths[path][Object.keys(paths[path])[0]]?.summary).toContain("Central SSO Session");
     }
     const sessionResponse = await fetch(`${provider}/api/auth/get-session`);
     expect(sessionResponse.status).toBe(200);
@@ -519,8 +533,8 @@ async function authPost(path: string, body: object) {
     expect((await discovery.json()).issuer).toBe(`${provider}/api/auth`);
     expect((await fetch(`${provider}/health/ready`)).status).toBe(200);
   });
-  test("serves local OpenAPI documentation for Elysia-owned routes only", async () => {
-    const documentation = await fetch(`${provider}/openapi/json`);
+  test("serves Elysia and selected Better Auth operations in local OpenAPI docs", async () => {
+    const documentation = await fetch(`${provider}/docs/json`);
     expect(documentation.status).toBe(200);
     const spec = await documentation.json() as {
       paths: Record<string, Record<string, {
@@ -529,12 +543,18 @@ async function authPost(path: string, body: object) {
       }>>;
       servers?: { url: string }[];
     };
-    expect(Object.keys(spec.paths).sort()).toEqual([
+    for (const path of [
       "/api/auth/config",
       "/api/auth/relying-party-destination",
       "/health/live",
       "/health/ready",
-    ]);
+    ]) expect(spec.paths[path]).toBeDefined();
+    for (const path of [
+      "/api/auth/oauth2/authorize",
+      "/api/auth/oauth2/token",
+      "/api/auth/.well-known/openid-configuration",
+      "/api/auth/sign-in/social",
+    ]) expect(spec.paths[path]).toBeUndefined();
     expect(spec.paths["/api/auth/relying-party-destination"].get?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "client_id", required: true }),
@@ -546,7 +566,7 @@ async function authPost(path: string, body: object) {
     expect(spec.paths["/api/auth/config"].get?.responses?.["200"]?.content?.["application/json"]?.schema?.properties?.oauthEnabled).toBeDefined();
     expect(spec.paths["/health/live"].get?.responses?.["200"]?.content?.["application/json"]?.schema?.properties?.status).toBeDefined();
     expect(spec.paths["/health/ready"].get?.responses?.["503"]?.content?.["application/json"]?.schema?.properties?.status).toBeDefined();
-    const ui = await fetch(`${provider}/openapi`);
+    const ui = await fetch(`${provider}/docs`);
     expect(ui.status).toBe(200);
     expect(ui.headers.get("content-type")).toContain("text/html");
     expect(spec.servers).toEqual([{ url: "/" }]);
@@ -562,7 +582,7 @@ async function authPost(path: string, body: object) {
   });
 });
 test.skipIf(!process.env.TEST_PRODUCTION_PROVIDER_URL)("does not expose OpenAPI in production-like mode", async () => {
-  for (const path of ["/openapi", "/openapi/json"]) {
+  for (const path of ["/docs", "/docs/json"]) {
     const response = await fetch(`${process.env.TEST_PRODUCTION_PROVIDER_URL}${path}`);
     expect(response.status).toBe(404);
   }

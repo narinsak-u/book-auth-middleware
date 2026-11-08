@@ -8,7 +8,7 @@ import { allowedOAuthCallback } from "./provision-oauth-client";
 import { auth } from "./auth";
 
 const oauthEnabled = process.env.NODE_ENV !== "production" || process.env.TEST_PRODUCTION === "true";
-const openApiEnabled = process.env.NODE_ENV !== "production" && process.env.TEST_PRODUCTION !== "true";
+const openApiEnabled = process.env.NODE_ENV === "development" && process.env.LOCAL_DEVELOPMENT === "true" && process.env.TEST_PRODUCTION !== "true";
 const configurationSchema = Schema.Struct({ oauthEnabled: Schema.Boolean });
 const healthLiveSchema = Schema.Struct({ status: Schema.Literal("live") });
 const healthReadySchema = Schema.Struct({ status: Schema.Literal("ready", "not_ready") });
@@ -46,11 +46,17 @@ type AuthRequestBody = {
     };
   };
 };
-const authOperation = (summary: string, description: string, requestBody?: AuthRequestBody) => ({
+const authOperation = (
+  summary: string,
+  description: string,
+  requestBody?: AuthRequestBody,
+  parameters?: { name: string; in: "query"; required: boolean; schema: { type: "string" } }[],
+) => ({
   tags: ["Better Auth account and session"],
   summary,
   description,
   ...(requestBody ? { requestBody } : {}),
+  ...(parameters ? { parameters } : {}),
   responses: { 200: { description: "Better Auth response." } },
 });
 const accountApiPaths = {
@@ -72,40 +78,48 @@ const accountApiPaths = {
       email: { type: "string", format: "email", description: "Placeholder address only." },
     }, ["email"], { email: "person@example.invalid" })),
   },
+  "/api/auth/verify-email": {
+    get: authOperation("Verify an email address", "Verifies the address using the token from an email verification message.", undefined, [
+      { name: "token", in: "query", required: true, schema: { type: "string" } },
+    ]),
+  },
   "/api/auth/request-password-reset": {
-    post: authOperation("Request a password reset", "Requests a password reset link. Use the local portal origin for redirectTo.", authRequest({
+    post: authOperation("Request a password reset", "Requests a password reset link. redirectTo is optional; omit it to use Better Auth's default destination.", authRequest({
       email: { type: "string", format: "email", description: "Placeholder address only." },
-      redirectTo: { type: "string", format: "uri", description: "Local password-reset page URL." },
-    }, ["email", "redirectTo"], { email: "person@example.invalid", redirectTo: "http://localhost:8080/PLACEHOLDER_RESET_PATH" })),
+      redirectTo: { type: "string", format: "uri", description: "Optional local password-reset page URL." },
+    }, ["email"], { email: "person@example.invalid", redirectTo: "http://localhost:8080/PLACEHOLDER_RESET_PATH" })),
   },
   "/api/auth/reset-password": {
-    post: authOperation("Reset a password", "Sets a new password using a token from a password-reset message.", authRequest({
-      token: { type: "string", description: "Placeholder reset token only." },
+    post: authOperation("Reset a password", "Sets a new password using a token from a reset message. Provide token in the query or JSON body.", authRequest({
+      token: { type: "string", description: "Optional placeholder reset token; may be supplied here or as a query parameter." },
       newPassword: { type: "string", format: "password", description: "Placeholder password only." },
-    }, ["token", "newPassword"], { token: "PLACEHOLDER_RESET_TOKEN", newPassword: "PLACEHOLDER_PASSWORD" })),
+    }, ["newPassword"], { token: "PLACEHOLDER_RESET_TOKEN", newPassword: "PLACEHOLDER_PASSWORD" }), [
+      { name: "token", in: "query", required: false, schema: { type: "string" } },
+    ]),
   },
   "/api/auth/get-session": {
-    get: authOperation("Read the current session", "Returns the current Central SSO Session, or null when no valid session cookie is present."),
+    get: authOperation("Read the current Central SSO Session", "Returns the current Central SSO Session, or null when no valid session cookie is present."),
   },
   "/api/auth/list-sessions": {
-    get: authOperation("List current identity sessions", "Lists sessions belonging to the authenticated Central Identity."),
+    get: authOperation("List Central SSO Sessions", "Lists Central SSO Sessions belonging to the authenticated Central Identity."),
   },
   "/api/auth/sign-out": {
-    post: authOperation("End the current session", "Ends the session identified by the current session cookie."),
+    post: authOperation("End the current Central SSO Session", "Ends the Central SSO Session identified by the current session cookie."),
   },
   "/api/auth/revoke-session": {
-    post: authOperation("Revoke a session", "Revokes the session identified by its token.", authRequest({
+    post: authOperation("Revoke a Central SSO Session", "Revokes a Central SSO Session identified by its token.", authRequest({
       token: { type: "string", description: "Placeholder session token only." },
     }, ["token"], { token: "PLACEHOLDER_SESSION_TOKEN" })),
   },
   "/api/auth/revoke-sessions": {
-    post: authOperation("Revoke all sessions", "Revokes all sessions for the authenticated Central Identity."),
+    post: authOperation("Revoke all Central SSO Sessions", "Revokes all Central SSO Sessions for the authenticated Central Identity."),
   },
 };
 
 const app = new Elysia()
   .use(openapi({
     enabled: openApiEnabled,
+    path: "/docs",
     documentation: {
       info: { title: "Central Identity local API", version: "1.0.0" },
       servers: [{ url: "/" }],

@@ -12,6 +12,7 @@ export function hostDevelopmentEnvironment(environment: Environment): Environmen
     DATABASE_URL: database.toString(),
     SMTP_HOST: environment.SMTP_HOST === "mailpit" ? "127.0.0.1" : environment.SMTP_HOST,
     NODE_ENV: "development",
+    LOCAL_DEVELOPMENT: "true",
     PORT: "3080",
     HOST: "127.0.0.1",
   };
