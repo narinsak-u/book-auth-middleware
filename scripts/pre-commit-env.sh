@@ -14,20 +14,14 @@ while IFS= read -r -d '' file; do
       fi
       if [ "$file" = .env.test-production ]; then
         key_file=.env.test-production.keys
-        encrypt_script=env:encrypt:test-production
       else
         key_file=.env.keys
-        if [ "$file" = .env.production ]; then
-          encrypt_script=env:encrypt:production
-        else
-          encrypt_script=env:encrypt:development
-        fi
       fi
       if [ ! -s "$key_file" ]; then
         echo "Cannot commit $file: $key_file is missing or empty; restore your backed-up key first." >&2
         exit 1
       fi
-      bun run "$encrypt_script"
+      dotenvx encrypt -f "$file" -fk "$key_file"
       git add -- "$file"
       if ! git show ":$file" | awk -F= '
         /^[[:space:]]*(#|$)/ { next }

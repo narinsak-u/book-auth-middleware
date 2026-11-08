@@ -1,12 +1,131 @@
 import { eq } from "drizzle-orm";
 import { databaseReady, db, oauthClient, user } from "@central-identity/db";
+import * as JSONSchema from "effect/JSONSchema";
+import * as Schema from "effect/Schema";
+import { openapi } from "@elysia/openapi";
 import { Elysia } from "elysia";
 import { allowedOAuthCallback } from "./provision-oauth-client";
 import { auth } from "./auth";
 
 const oauthEnabled = process.env.NODE_ENV !== "production" || process.env.TEST_PRODUCTION === "true";
+const openApiEnabled = process.env.NODE_ENV === "development" && process.env.LOCAL_DEVELOPMENT === "true" && process.env.TEST_PRODUCTION !== "true";
+const configurationSchema = Schema.Struct({ oauthEnabled: Schema.Boolean });
+const healthLiveSchema = Schema.Struct({ status: Schema.Literal("live") });
+const healthReadySchema = Schema.Struct({ status: Schema.Literal("ready", "not_ready") });
+const destinationQuerySchema = Schema.Struct({
+  client_id: Schema.String.pipe(Schema.minLength(1)).annotations({ description: "Registered Relying Party client identifier.", examples: ["example-client-id"] }),
+  redirect_uri: Schema.String.pipe(Schema.minLength(1)).annotations({ description: "Exact callback destination registered for that client.", examples: ["https://example.test/callback"] }),
+});
+const destinationResponseSchema = Schema.Struct({ destination: Schema.NullOr(Schema.String) });
+const destinationValidationSchema = Schema.Struct({ type: Schema.Literal("validation") });
+const destinationQueryJsonSchema = JSONSchema.make(destinationQuerySchema) as {
+  properties?: Record<string, { description?: string; examples?: unknown[] }>;
+  required?: string[];
+};
+const jsonSchema = (schema: Schema.Schema.Any) => JSONSchema.make(schema) as never;
+
+const authRequest = (
+  properties: Record<string, { type: string; format?: string; description: string }>,
+  required: string[],
+  example: Record<string, string>,
+) => ({
+  required: true,
+  content: {
+    "application/json": {
+      schema: { type: "object", required, properties },
+      example,
+    },
+  },
+});
+type AuthRequestBody = {
+  required: true;
+  content: {
+    "application/json": {
+      schema: { type: "object"; required: string[]; properties: Record<string, { type: string; format?: string; description: string }> };
+      example: Record<string, string>;
+    };
+  };
+};
+const authOperation = (
+  summary: string,
+  description: string,
+  requestBody?: AuthRequestBody,
+  parameters?: { name: string; in: "query"; required: boolean; schema: { type: "string" } }[],
+) => ({
+  tags: ["Better Auth account and session"],
+  summary,
+  description,
+  ...(requestBody ? { requestBody } : {}),
+  ...(parameters ? { parameters } : {}),
+  responses: { 200: { description: "Better Auth response." } },
+});
+const accountApiPaths = {
+  "/api/auth/sign-up/email": {
+    post: authOperation("Register with email and password", "Creates a Central Identity and sends an email verification message.", authRequest({
+      name: { type: "string", description: "Placeholder display name." },
+      email: { type: "string", format: "email", description: "Use a non-deliverable placeholder address." },
+      password: { type: "string", format: "password", description: "Placeholder password; never use a real credential in this example." },
+    }, ["name", "email", "password"], { name: "Placeholder Person", email: "person@example.invalid", password: "PLACEHOLDER_PASSWORD" })),
+  },
+  "/api/auth/sign-in/email": {
+    post: authOperation("Sign in with email and password", "Starts a Central SSO Session for a verified Central Identity.", authRequest({
+      email: { type: "string", format: "email", description: "Placeholder address only." },
+      password: { type: "string", format: "password", description: "Placeholder password only." },
+    }, ["email", "password"], { email: "person@example.invalid", password: "PLACEHOLDER_PASSWORD" })),
+  },
+  "/api/auth/send-verification-email": {
+    post: authOperation("Send an email verification message", "Requests a verification message for the supplied email address.", authRequest({
+      email: { type: "string", format: "email", description: "Placeholder address only." },
+    }, ["email"], { email: "person@example.invalid" })),
+  },
+  "/api/auth/verify-email": {
+    get: authOperation("Verify an email address", "Verifies the address using the token from an email verification message.", undefined, [
+      { name: "token", in: "query", required: true, schema: { type: "string" } },
+    ]),
+  },
+  "/api/auth/request-password-reset": {
+    post: authOperation("Request a password reset", "Requests a password reset link. redirectTo is optional; omit it to use Better Auth's default destination.", authRequest({
+      email: { type: "string", format: "email", description: "Placeholder address only." },
+      redirectTo: { type: "string", format: "uri", description: "Optional local password-reset page URL." },
+    }, ["email"], { email: "person@example.invalid", redirectTo: "http://localhost:8080/PLACEHOLDER_RESET_PATH" })),
+  },
+  "/api/auth/reset-password": {
+    post: authOperation("Reset a password", "Sets a new password using a token from a reset message. Provide token in the query or JSON body.", authRequest({
+      token: { type: "string", description: "Optional placeholder reset token; may be supplied here or as a query parameter." },
+      newPassword: { type: "string", format: "password", description: "Placeholder password only." },
+    }, ["newPassword"], { token: "PLACEHOLDER_RESET_TOKEN", newPassword: "PLACEHOLDER_PASSWORD" }), [
+      { name: "token", in: "query", required: false, schema: { type: "string" } },
+    ]),
+  },
+  "/api/auth/get-session": {
+    get: authOperation("Read the current Central SSO Session", "Returns the current Central SSO Session, or null when no valid session cookie is present."),
+  },
+  "/api/auth/list-sessions": {
+    get: authOperation("List Central SSO Sessions", "Lists Central SSO Sessions belonging to the authenticated Central Identity."),
+  },
+  "/api/auth/sign-out": {
+    post: authOperation("End the current Central SSO Session", "Ends the Central SSO Session identified by the current session cookie."),
+  },
+  "/api/auth/revoke-session": {
+    post: authOperation("Revoke a Central SSO Session", "Revokes a Central SSO Session identified by its token.", authRequest({
+      token: { type: "string", description: "Placeholder session token only." },
+    }, ["token"], { token: "PLACEHOLDER_SESSION_TOKEN" })),
+  },
+  "/api/auth/revoke-sessions": {
+    post: authOperation("Revoke all Central SSO Sessions", "Revokes all Central SSO Sessions for the authenticated Central Identity."),
+  },
+};
 
 const app = new Elysia()
+  .use(openapi({
+    enabled: openApiEnabled,
+    path: "/docs",
+    documentation: {
+      info: { title: "Central Identity local API", version: "1.0.0" },
+      servers: [{ url: "/" }],
+      paths: accountApiPaths,
+    },
+  }))
   .onRequest(async ({ request }) => {
     const path = new URL(request.url).pathname;
     if (path === "/api/auth/oauth2/authorize") {
@@ -38,40 +157,80 @@ const app = new Elysia()
       status: response.status,
     }));
   })
-  .get("/api/auth/config", () => ({ oauthEnabled }))
+  .get("/api/auth/config", () => Schema.decodeUnknownSync(configurationSchema)({ oauthEnabled }), {
+    detail: {
+      tags: ["Local API"],
+      summary: "Read local authentication configuration",
+      responses: { 200: { description: "Current Central Identity configuration.", content: { "application/json": { schema: jsonSchema(configurationSchema) } } } },
+    },
+  })
   .get("/api/auth/relying-party-destination", async ({ query, set }) => {
-    const clientId = typeof query.client_id === "string" ? query.client_id : "";
-    const redirectUri = typeof query.redirect_uri === "string" ? query.redirect_uri : "";
-    if (!clientId || !redirectUri) {
-      set.status = 400;
-      return { destination: null };
+    const parsed = Schema.decodeUnknownEither(destinationQuerySchema)(query);
+    if (parsed._tag === "Left") {
+      set.status = 422;
+      return Schema.decodeUnknownSync(destinationValidationSchema)({ type: "validation" });
     }
+    const { client_id: clientId, redirect_uri: redirectUri } = parsed.right;
     const [client] = await db.select({
       disabled: oauthClient.disabled,
       redirectUris: oauthClient.redirectUris,
     }).from(oauthClient).where(eq(oauthClient.clientId, clientId)).limit(1);
     if (!client || client.disabled || !client.redirectUris.includes(redirectUri)) {
       set.status = 400;
-      return { destination: null };
+      return Schema.decodeUnknownSync(destinationResponseSchema)({ destination: null });
     }
     const destination = new URL(redirectUri);
     if (!allowedOAuthCallback(destination)) {
       set.status = 400;
-      return { destination: null };
+      return Schema.decodeUnknownSync(destinationResponseSchema)({ destination: null });
     }
-    return { destination: destination.origin };
+    return Schema.decodeUnknownSync(destinationResponseSchema)({ destination: destination.origin });
+  }, {
+    detail: {
+      tags: ["Local API"],
+      summary: "Resolve a registered Relying Party destination",
+      description: "Returns the origin for an exact registered callback. Unknown, disabled, or unregistered callbacks return a null destination.",
+      parameters: Object.entries(destinationQueryJsonSchema.properties ?? {}).map(([name, schema]) => ({
+        name,
+        in: "query" as const,
+        required: destinationQueryJsonSchema.required?.includes(name) ?? false,
+        description: schema.description,
+        example: schema.examples?.[0],
+        schema: schema as never,
+      })),
+      responses: {
+        200: { description: "The registered callback origin.", content: { "application/json": { schema: jsonSchema(destinationResponseSchema) } } },
+        400: { description: "The client or callback is not registered.", content: { "application/json": { schema: jsonSchema(destinationResponseSchema) } } },
+        422: { description: "Query parameters do not match the documented schema.", content: { "application/json": { schema: jsonSchema(destinationValidationSchema) } } },
+      },
+    },
   })
-  .get("/health/live", () => ({ status: "live" }))
+  .get("/health/live", () => Schema.decodeUnknownSync(healthLiveSchema)({ status: "live" }), {
+    detail: {
+      tags: ["Local API"],
+      summary: "Check process liveness",
+      responses: { 200: { description: "The server process is live.", content: { "application/json": { schema: jsonSchema(healthLiveSchema) } } } },
+    },
+  })
   .get("/health/ready", async ({ set }) => {
     try {
       await databaseReady();
-      return { status: "ready" };
+      return Schema.decodeUnknownSync(healthReadySchema)({ status: "ready" });
     } catch {
       set.status = 503;
-      return { status: "not_ready" };
+      return Schema.decodeUnknownSync(healthReadySchema)({ status: "not_ready" });
     }
+  }, {
+    detail: {
+      tags: ["Local API"],
+      summary: "Check database readiness",
+      responses: {
+        200: { description: "Database is ready.", content: { "application/json": { schema: jsonSchema(healthReadySchema) } } },
+        503: { description: "Database is not ready.", content: { "application/json": { schema: jsonSchema(healthReadySchema) } } },
+      },
+    },
   })
   .mount(auth.handler)
-  .listen({ hostname: "0.0.0.0", port: Number(process.env.PORT ?? 3000) });
+  .listen({ hostname: process.env.HOST ?? "0.0.0.0", port: Number(process.env.PORT ?? 3000) });
 
 console.log(`Central Identity listening on ${app.server?.hostname}:${app.server?.port}`);

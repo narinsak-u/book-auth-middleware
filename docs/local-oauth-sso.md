@@ -8,11 +8,33 @@ proxy either application. Production and test-production remain HTTPS.
 
 ## Start Central Identity
 
-Run `bun run dev` from the Central Identity checkout. It starts the ordinary
-Compose stack at `http://localhost:8080`, binds the gateway to loopback, and
-preserves existing named volumes. No CA, hostname, or browser trust setup is
-required. Email/password sign-in is the supported local path. Google and GitHub
-callbacks are deferred and unverified for this HTTP flow; do not rely on them.
+Choose one runtime mode. Do not run both at once; both use `http://localhost:8080`.
+
+### Bun-hosted applications
+
+Start PostgreSQL and Mailpit with Compose:
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
+  docker compose --env-file /dev/null -f compose.yaml -f compose.bun.yaml up -d --wait db mailpit
+```
+
+Then run the API and portal with Bun:
+
+```sh
+bun run dev
+```
+
+The command migrates the database, runs the API on port `3080`, and serves the portal on port `8080`.
+
+### Full Docker stack
+
+```sh
+bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
+  docker compose --env-file /dev/null up --build
+```
+
+This runs PostgreSQL, Mailpit, API, portal, and Caddy in Compose.
 
 Run Book Bidding in a second terminal:
 
