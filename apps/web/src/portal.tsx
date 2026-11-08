@@ -220,16 +220,29 @@ export function Enrollment() {
     }
   }
 
-  return <main className="portal-shell"><section className="form-panel">
-    <h1>Create a Central Identity</h1>
-    {submitted ? <p role="status">Check your email to verify your identity.</p> : <form onSubmit={submit} aria-busy={pending}>
-      <label htmlFor="signup-name">Name</label><input id="signup-name" name="name" autoComplete="name" required disabled={pending} />
-      <label htmlFor="signup-username">Username</label><input id="signup-username" name="username" autoComplete="username" autoCapitalize="none" minLength={3} maxLength={30} pattern="[A-Za-z0-9_]+" required disabled={pending} />
-      <label htmlFor="signup-email">Email address</label><input id="signup-email" name="email" type="email" autoComplete="email" required disabled={pending} />
-      <label htmlFor="signup-password">Password</label><input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={8} required disabled={pending} />
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
-    </form>}
-    <a href="/sign-in">Return to sign in</a>
-  </section></main>;
+  return <main className="portal-shell">
+    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true">●</span> Secure account creation</span></header>
+    <div className="signin-layout">
+      <section className="welcome-panel" aria-labelledby="signup-welcome-title">
+        <p className="welcome-kicker">A single identity</p>
+        <h1 id="signup-welcome-title">Your applications stay yours.</h1>
+        <p>Create your Central Identity to continue to connected applications. Verify your email to finish setting up your account.</p>
+        <div className="privacy-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      </section>
+      <section className="form-panel" aria-labelledby="signup-title">
+        <p className="form-kicker">Get started</p>
+        <h2 id="signup-title">Create a Central Identity</h2>
+        <p className="form-intro">Use one identity to sign in to connected applications.</p>
+        {submitted ? <p role="status">Check your email to verify your identity.</p> : <form onSubmit={submit} aria-busy={pending}>
+          <label htmlFor="signup-name">Name</label><input id="signup-name" name="name" autoComplete="name" required disabled={pending} />
+          <label htmlFor="signup-username">Username</label><input id="signup-username" name="username" autoComplete="username" autoCapitalize="none" minLength={3} maxLength={30} pattern="[A-Za-z0-9_]+" required disabled={pending} />
+          <label htmlFor="signup-email">Email address</label><input id="signup-email" name="email" type="email" autoComplete="email" required disabled={pending} />
+          <label htmlFor="signup-password">Password</label><input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={8} required disabled={pending} />
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
+        </form>}
+        <div className="account-links"><a href="/sign-in">Return to sign in</a></div>
+      </section>
+    </div>
+  </main>;
 }
