@@ -4,7 +4,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth, getCurrentAdapter } from "better-auth";
 import { jwt, username } from "better-auth/plugins";
-import nodemailer from "nodemailer";
+import { createEmailSender } from "./email";
 import { db } from "@central-identity/db";
 import * as schema from "@central-identity/db/schema";
 import { allowCredentialSignup } from "./enrollment-invitation";
@@ -34,19 +34,7 @@ const googleClientId = testProduction ? required("GOOGLE_CLIENT_ID") : !producti
 const googleClientSecret = testProduction ? required("GOOGLE_CLIENT_SECRET") : !production ? process.env.GOOGLE_CLIENT_SECRET : undefined;
 const githubClientId = testProduction ? required("GITHUB_CLIENT_ID") : !production ? process.env.GITHUB_CLIENT_ID : undefined;
 const githubClientSecret = testProduction ? required("GITHUB_CLIENT_SECRET") : !production ? process.env.GITHUB_CLIENT_SECRET : undefined;
-const smtpPort = Number(required("SMTP_PORT"));
-if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
-  throw new Error("SMTP_PORT must be a valid TCP port");
-}
-const mailer = nodemailer.createTransport({
-  host: required("SMTP_HOST"),
-  port: smtpPort,
-  secure: smtpPort === 465,
-  requireTLS: productionRuntime && smtpPort !== 465,
-  ...(productionRuntime ? {
-    auth: { user: required("SMTP_USER"), pass: required("SMTP_PASSWORD") },
-  } : {}),
-});
+const sendEmail = createEmailSender(process.env, productionRuntime);
 
 export const auth = betterAuth({
   appName: "Central Identity",
@@ -111,8 +99,7 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
     sendResetPassword: async ({ user, url }) => {
-      await mailer.sendMail({
-        from: required("SMTP_FROM"),
+      await sendEmail({
         to: user.email,
         subject: "Reset your Central Identity password",
         text: `Reset your password using this one-time link: ${url}`,
@@ -122,8 +109,7 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
-      await mailer.sendMail({
-        from: required("SMTP_FROM"),
+      await sendEmail({
         to: user.email,
         subject: "Verify your Central Identity email",
         text: `Verify your email address: ${url}`,

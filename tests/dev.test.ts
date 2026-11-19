@@ -4,6 +4,7 @@ import { hostDevelopmentEnvironment } from "../scripts/dev";
 test("maps Compose-only dependency hosts to loopback for Bun development", () => {
   const environment = hostDevelopmentEnvironment({
     DATABASE_URL: "postgres://central:local@db:5432/central",
+    EMAIL_PROVIDER: "mailpit",
     SMTP_HOST: "mailpit",
     SMTP_PORT: "1025",
     BETTER_AUTH_URL: "http://localhost:8080",
@@ -11,6 +12,7 @@ test("maps Compose-only dependency hosts to loopback for Bun development", () =>
   });
 
   expect(new URL(environment.DATABASE_URL!).hostname).toBe("127.0.0.1");
+  expect(environment.EMAIL_PROVIDER).toBe("mailpit");
   expect(environment.SMTP_HOST).toBe("127.0.0.1");
   expect(environment.HOST).toBe("127.0.0.1");
   expect(environment.PORT).toBe("3080");

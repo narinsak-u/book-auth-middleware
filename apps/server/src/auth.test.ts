@@ -96,8 +96,11 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
     expect(signup.status).toBe(200);
     const inbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
     const verificationMessage = (await inbox.json()).messages[0];
+    expect(verificationMessage.Subject).toBe("Verify your Central Identity email");
     const verification = await fetch(`${mailpit}/api/v1/message/${verificationMessage.ID}`);
-    const verificationURL = (await verification.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
+    const verificationText = (await verification.json()).Text as string;
+    expect(verificationText).toContain("Verify your email address:");
+    const verificationURL = verificationText.match(/https?:\/\/[^\s<>"]+/)?.[0];
     expect(typeof verificationURL).toBe("string");
     await fetch(verificationURL!, { redirect: "manual" });
 
@@ -119,9 +122,11 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
 
     const resetInbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
     const resetMessage = (await resetInbox.json()).messages[0];
+    expect(resetMessage.Subject).toBe("Reset your Central Identity password");
     const resetMail = await fetch(`${mailpit}/api/v1/message/${resetMessage.ID}`);
-    const resetURL = (await resetMail.json()).Text.match(/https?:\/\/[^\s<>"]+/)?.[0];
-    expect(typeof resetURL).toBe("string");
+    const resetText = (await resetMail.json()).Text as string;
+    expect(resetText).toContain("Reset your password using this one-time link:");
+    const resetURL = resetText.match(/https?:\/\/[^\s<>"]+/)?.[0];
     const redirect = await fetch(resetURL!, { redirect: "manual" });
     const resetPage = new URL(redirect.headers.get("location")!);
     const token = resetPage.searchParams.get("token");
