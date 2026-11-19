@@ -186,9 +186,15 @@ export function Enrollment() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [showToast, setShowToast] = useState(false);
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
   const oauthQuery = params?.get("oauth_query") ?? null;
   const invitation = params?.get("invitation") ?? "";
+  useEffect(() => {
+    if (!showToast) return;
+    const timeout = window.setTimeout(() => setShowToast(false), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [showToast]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -213,6 +219,7 @@ export function Enrollment() {
       });
       if (!response.ok) throw new Error("Enrollment failed");
       setSubmitted(true);
+      setShowToast(true);
     } catch {
       setError("Registration failed. Check your details or try a different username or email.");
     } finally {
@@ -235,12 +242,16 @@ export function Enrollment() {
         <p className="form-intro">Use one identity to sign in to connected applications.</p>
         {submitted ? <p role="status">Check your email to verify your identity.</p> : <form onSubmit={submit} aria-busy={pending}>
           <label htmlFor="signup-name">Name</label><input id="signup-name" name="name" autoComplete="name" required disabled={pending} />
-          <label htmlFor="signup-username">Username</label><input id="signup-username" name="username" autoComplete="username" autoCapitalize="none" minLength={3} maxLength={30} pattern="[A-Za-z0-9_]+" required disabled={pending} />
+          <label htmlFor="signup-username">Username</label><input id="signup-username" name="username" autoComplete="username" autoCapitalize="none" minLength={3} maxLength={30} pattern="[A-Za-z0-9_]+" aria-describedby="signup-username-help" required disabled={pending} />
+          <p className="field-hint" id="signup-username-help">Use 3–30 letters, numbers, or underscores.</p>
           <label htmlFor="signup-email">Email address</label><input id="signup-email" name="email" type="email" autoComplete="email" required disabled={pending} />
-          <label htmlFor="signup-password">Password</label><input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={8} required disabled={pending} />
+          <label htmlFor="signup-password">Password</label><input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={8} aria-describedby="signup-password-help" required disabled={pending} />
+          <p className="field-hint" id="signup-password-help">Use at least 8 characters.</p>
           {error && <p className="form-error" role="alert">{error}</p>}
+          {pending && <p className="form-status" role="status" aria-live="polite">Creating your Central Identity…</p>}
           <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
         </form>}
+        {showToast && <p className="success-toast" role="status" aria-live="polite">Central Identity created. Verify your email to finish setup.</p>}
         <div className="account-links"><a href="/sign-in">Return to sign in</a></div>
       </section>
     </div>
