@@ -1,7 +1,14 @@
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 type Environment = Record<string, string | undefined>;
 type Message = { to: string; subject: string; text: string };
+type ResendClient = {
+  emails: {
+    send(message: { from: string; to: string; subject: string; text: string }): Promise<{ error?: unknown }>;
+  };
+};
+type ResendFactory = (apiKey: string) => ResendClient;
 
 const required = (environment: Environment, name: string): string => {
   const value = environment[name];
@@ -9,11 +16,28 @@ const required = (environment: Environment, name: string): string => {
   return value;
 };
 
-export function createEmailSender(environment: Environment, productionRuntime: boolean) {
+export function createEmailSender(
+  environment: Environment,
+  productionRuntime: boolean,
+  createResend: ResendFactory = (apiKey) => new Resend(apiKey),
+) {
   const provider = required(environment, "EMAIL_PROVIDER");
-  const expectedProvider = productionRuntime ? "smtp" : "mailpit";
+  const expectedProvider = productionRuntime ? "resend" : "mailpit";
   if (provider !== expectedProvider) {
     throw new Error(`EMAIL_PROVIDER must be ${expectedProvider} for this runtime`);
+  }
+
+  const from = required(environment, "EMAIL_FROM");
+  if (productionRuntime) {
+    const resend = createResend(required(environment, "RESEND_API_KEY"));
+    return async ({ to, subject, text }: Message): Promise<void> => {
+      try {
+        const { error } = await resend.emails.send({ from, to, subject, text });
+        if (error) throw new Error();
+      } catch {
+        throw new Error("Email delivery failed");
+      }
+    };
   }
 
   const port = Number(required(environment, "SMTP_PORT"));
@@ -24,15 +48,7 @@ export function createEmailSender(environment: Environment, productionRuntime: b
     host: required(environment, "SMTP_HOST"),
     port,
     secure: port === 465,
-    requireTLS: productionRuntime && port !== 465,
-    ...(productionRuntime ? {
-      auth: {
-        user: required(environment, "SMTP_USER"),
-        pass: required(environment, "SMTP_PASSWORD"),
-      },
-    } : {}),
   });
-  const from = required(environment, "EMAIL_FROM");
 
   return async ({ to, subject, text }: Message): Promise<void> => {
     try {
