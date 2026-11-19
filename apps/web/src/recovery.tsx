@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { authClient } from "./auth-client";
+import { SuccessToast } from "./success-toast";
 
 function Shell({ children }: { children: ReactNode }) {
-  return <main className="portal-shell"><header className="topbar"><a className="brand" href="/">Central Identity</a><span className="secure-label">Account recovery</span></header><section className="recovery-panel">{children}</section></main>;
+  return <main className="portal-shell"><header className="topbar"><a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a><span className="secure-label">Account recovery</span></header><section className="recovery-panel">{children}</section></main>;
 }
 
 
@@ -18,7 +19,6 @@ function safeReturnTo(): string {
 
 export function ForgotPassword() {
   const returnTo = safeReturnTo();
-
   const [pending, setPending] = useState(false);
   const [requested, setRequested] = useState(false);
   const [error, setError] = useState("");
@@ -42,11 +42,36 @@ export function ForgotPassword() {
     }
   }
 
-  return <Shell><p className="form-kicker">Password recovery</p><h1>Reset your password</h1><p>Enter your email address and we’ll send a reset link if an account matches.</p>{requested ? <p role="status">If an account matches that email address, a reset link will arrive shortly.</p> : <form onSubmit={submit} aria-busy={pending}><label htmlFor="recovery-email">Email address</label><input id="recovery-email" name="email" type="email" autoComplete="email" required disabled={pending} />{error && <p className="form-error" role="alert">{error}</p>}<button className="button" type="submit" disabled={pending}>{pending ? "Sending reset link…" : "Send reset link"}</button></form>}<p><a href="/sign-in">Return to sign in</a></p></Shell>;
+  return <Shell>
+    <p className="form-kicker">Password recovery</p>
+    <h1>Reset your password</h1>
+    <p className="form-intro">Enter your email address and we’ll send a reset link if an account matches.</p>
+    {requested
+      ? <>
+        <p className="form-status">If an account matches that email address, a reset link will arrive shortly.</p>
+        <SuccessToast message="Password reset request received." />
+      </>
+      : <form onSubmit={submit} aria-busy={pending}>
+        <label htmlFor="recovery-email">Email address</label>
+        <input
+          id="recovery-email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          disabled={pending}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "recovery-error" : undefined}
+        />
+        {error && <p id="recovery-error" className="form-error" role="alert">{error}</p>}
+        <button className="button" type="submit" disabled={pending}>{pending ? "Sending reset link…" : "Send reset link"}</button>
+      </form>}
+    <p><a href="/sign-in">Return to sign in</a></p>
+  </Shell>;
 }
 
 export function ResetPassword() {
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     setToken(new URLSearchParams(window.location.search).get("token") ?? "");
   }, []);
@@ -57,6 +82,7 @@ export function ResetPassword() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!token) return;
     const newPassword = new FormData(event.currentTarget).get("newPassword") as string;
     setPending(true);
     setError("");
@@ -71,5 +97,34 @@ export function ResetPassword() {
     }
   }
 
-  return <Shell><p className="form-kicker">Password recovery</p><h1>Choose a new password</h1>{complete ? <><p role="status">Your password has been changed. Sign in with your new password.</p><a className="button" href={returnTo}>Return to sign in</a></> : <><p>Choose a new password for your Central Identity.</p><form onSubmit={submit} aria-busy={pending}><label htmlFor="new-password">New password</label><input id="new-password" name="newPassword" type="password" autoComplete="new-password" minLength={8} required disabled={pending || !token} />{error && <p className="form-error" role="alert">{error}</p>}<button className="button" type="submit" disabled={pending || !token}>{pending ? "Saving…" : "Set new password"}</button></form></>}</Shell>;
+  return <Shell>
+    <p className="form-kicker">Password recovery</p>
+    <h1>Choose a new password</h1>
+    {complete
+      ? <>
+        <p className="form-status">Your password has been changed. Sign in with your new password.</p>
+        <SuccessToast message="Password changed." />
+        <a className="button" href={returnTo}>Return to sign in</a>
+      </>
+      : <>
+        <p className="form-intro">Choose a new password for your Central Identity.</p>
+        {token === "" && <p id="reset-token-error" className="form-error" role="alert">This reset link is invalid or has expired. <a href="/forgot-password">Request a new link.</a></p>}
+        <form onSubmit={submit} aria-busy={pending}>
+          <label htmlFor="new-password">New password</label>
+          <input
+            id="new-password"
+            name="newPassword"
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            aria-describedby="new-password-help"
+            required
+            disabled={pending || !token}
+          />
+          <span id="new-password-help" className="field-help">Use at least 8 characters.</span>
+          {error && <p className="form-error" role="alert">{error} <a href="/forgot-password">Request a new link.</a></p>}
+          <button className="button" type="submit" disabled={pending || !token}>{pending ? "Saving…" : "Set new password"}</button>
+        </form>
+      </>}
+  </Shell>;
 }
