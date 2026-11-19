@@ -1,5 +1,6 @@
 import { authorizationResume, resumeSignInPath, verificationCallback } from "./authorization-resume";
 import { authClient } from "./auth-client";
+import { confirmedLinkedProvider } from "./provider-link";
 import { SuccessToast } from "./success-toast";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -9,18 +10,21 @@ function Brand() {
   return <a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a>;
 }
 
-function SignOut({ email, allowLinking }: { email: string; allowLinking: boolean }) {
+function SignOut({ email, allowLinking, linkedProvider }: { email: string; allowLinking: boolean; linkedProvider: "google" | "github" | undefined }) {
   const [pending, setPending] = useState(false);
   const [ended, setEnded] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState("");
+  useEffect(() => {
+    if (linkedProvider) setSuccess(`${linkedProvider === "google" ? "Google" : "GitHub"} account linked successfully.`);
+  }, [linkedProvider]);
   const [messageError, setMessageError] = useState(false);
   async function link(provider: "google" | "github") {
     setPending(true);
     setMessageError(false);
     setMessage(`Opening ${provider === "google" ? "Google" : "GitHub"} to link your account…`);
     try {
-      const { error } = await authClient.linkSocial({ provider, callbackURL: "/" });
+      const { error } = await authClient.linkSocial({ provider, callbackURL: `/?providerLinked=${provider}` });
       if (error) throw error;
     } catch {
       setMessage("Provider link failed. Sign in to the provider account you want to add.");
@@ -64,6 +68,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [oauthEnabled, setOauthEnabled] = useState<boolean>();
+  const [linkedProvider, setLinkedProvider] = useState<"google" | "github">();
 
   useEffect(() => {
     authClient.getSession()
@@ -75,6 +80,24 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }, []);
 
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  const providerHint = params?.get("providerLinked") ?? null;
+  useEffect(() => {
+    if (!providerHint || !session?.user || oauthEnabled !== true) {
+      setLinkedProvider(undefined);
+      return;
+    }
+    let active = true;
+    void authClient.listAccounts()
+      .then(({ data, error }) => {
+        if (active && !error) setLinkedProvider(confirmedLinkedProvider(providerHint, data));
+      })
+      .catch(() => {
+        if (active) setLinkedProvider(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [providerHint, session, oauthEnabled]);
   const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
   const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
   const hasAuthorizationRequest = oauthQuery !== null;
@@ -106,7 +129,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     }
   }, [mode, session, hasAuthorizationRequest, resume?.clientId, resume?.redirectUri]);
 
-  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
+  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} linkedProvider={linkedProvider} /></main>;
   if (mode === "home") return <main className="portal-shell"><header className="topbar"><Brand /></header><section className="loading-panel" role="status">{session === null ? "Opening sign-in…" : "Checking your Central SSO Session…"}</section></main>;
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
