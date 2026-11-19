@@ -65,6 +65,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .success-toast { position: fixed; z-index: 10; right: 16px; bottom: 16px; left: 16px; width: min(420px, calc(100% - 32px)); margin: 0 auto; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); color: #115e59; line-height: 1.5; }
 .account-links { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: .875rem; line-height: 1.5; }
 .account-links p { margin: 8px 0 0; }
+.session-panel .button { width: 100%; }
 .direct-note { margin: 20px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
 .loading-panel { max-width: 500px; margin: 80px auto; padding: 24px; border: 1px solid var(--border); border-left: 3px solid var(--teal); background: var(--surface); color: var(--muted); }
 .session-panel { max-width: 680px; margin: 64px auto; padding: clamp(28px, 5vw, 48px); border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); }
@@ -78,9 +79,13 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .recovery-panel form { display: grid; gap: 8px; }
 .recovery-panel label { margin-top: 8px; color: var(--ink); font-size: .875rem; font-weight: 600; }
 .recovery-panel input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--input-border); border-radius: 0; background: var(--surface); color: var(--ink); }
+.recovery-panel input[aria-invalid="true"] { border-color: #b91c1c; }
+.field-help { color: var(--muted); font-size: .8125rem; line-height: 1.45; }
+.success-toast { position: fixed; right: 24px; bottom: 24px; z-index: 2; width: min(420px, calc(100vw - 48px)); margin: 0; padding: 16px; border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); color: #115e59; line-height: 1.5; }
 .recovery-panel input:disabled { background: #f1f5f9; }
 @media (max-width: 760px) {
   .portal-shell { width: min(100% - 32px, 540px); }
+  .topbar { align-items: flex-start; flex-direction: column; justify-content: center; padding: 16px 0; }
   .topbar { min-height: 68px; }
   .signin-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px 0 40px; }
   .welcome-panel { min-height: 0; padding: 28px 24px; }
@@ -90,6 +95,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
   .privacy-mark { margin-top: 24px; }
   .form-panel { padding: 24px; }
   .session-panel, .recovery-panel { margin: 40px auto; }
+  .success-toast { right: 16px; bottom: 16px; width: calc(100vw - 32px); }
 }
 @media (max-width: 380px) {
   .portal-shell { width: calc(100% - 32px); }
