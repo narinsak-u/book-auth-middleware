@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import postgres from "postgres";
 
 const provider = process.env.TEST_PROVIDER_URL;
 const mailpit = process.env.TEST_MAILPIT_URL;
@@ -144,6 +144,73 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
     expect((await authPost("sign-in/email", { email, password })).status).toBeGreaterThanOrEqual(400);
     expect((await authPost("sign-in/email", { email, password: "new-verified-password-456" })).status).toBe(200);
   });
+  test.skipIf(!mailpit || !process.env.DATABASE_URL)(
+    "rejects expired email verification and password reset tokens through public HTTP",
+    async () => {
+      const database = postgres(process.env.DATABASE_URL!);
+      const register = (email: string) => authPost("sign-up/email", {
+        name: "Expired Token User",
+        username: `expired_${crypto.randomUUID().slice(0, 8)}`,
+        email,
+        password: "verified-password-123",
+      });
+      const messageFor = async (email: string) => {
+        const inbox = await fetch(`${mailpit}/api/v1/messages?query=to:${encodeURIComponent(email)}`);
+        const message = (await inbox.json()).messages[0];
+        const response = await fetch(`${mailpit}/api/v1/message/${message.ID}`);
+        return (await response.json()).Text as string;
+      };
+
+      try {
+        const verificationEmail = `${crypto.randomUUID()}@example.test`;
+        expect((await register(verificationEmail)).status).toBe(200);
+        const verificationURL = (await messageFor(verificationEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
+        if (!verificationURL) throw new Error("Verification email had no link");
+        const verificationToken = new URL(verificationURL).searchParams.get("token");
+        if (!verificationToken) throw new Error("Verification email had no token");
+        expect((await database`
+          UPDATE verification SET expires_at = NOW() - INTERVAL '1 second'
+          WHERE identifier = ${verificationToken}
+        `).count).toBe(1);
+        await fetch(verificationURL, { redirect: "manual" });
+        expect((await authPost("sign-in/email", {
+          email: verificationEmail,
+          password: "verified-password-123",
+        })).status).toBeGreaterThanOrEqual(400);
+
+        const resetEmail = `${crypto.randomUUID()}@example.test`;
+        expect((await register(resetEmail)).status).toBe(200);
+        const freshVerificationURL = (await messageFor(resetEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
+        if (!freshVerificationURL) throw new Error("Verification email had no link");
+        await fetch(freshVerificationURL, { redirect: "manual" });
+        expect((await authPost("request-password-reset", {
+          email: resetEmail,
+          redirectTo: `${provider}/reset-password`,
+        })).status).toBe(200);
+        const resetURL = (await messageFor(resetEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
+        if (!resetURL) throw new Error("Password reset email had no link");
+        const resetPage = await fetch(resetURL, { redirect: "manual" });
+        const resetLocation = resetPage.headers.get("location");
+        if (!resetLocation) throw new Error("Password reset email had no redirect");
+        const token = new URL(resetLocation).searchParams.get("token");
+        if (!token) throw new Error("Password reset email had no token");
+        expect((await database`
+          UPDATE verification SET expires_at = NOW() - INTERVAL '1 second'
+          WHERE identifier = ${token}
+        `).count).toBe(1);
+        expect((await authPost("reset-password", {
+          token,
+          newPassword: "expired-reset-password-456",
+        })).status).toBeGreaterThanOrEqual(400);
+        expect((await authPost("sign-in/email", {
+          email: resetEmail,
+          password: "verified-password-123",
+        })).status).toBe(200);
+      } finally {
+        await database.end();
+      }
+    },
+  );
 
   test("rejects invalid reset tokens through the public HTTP API", async () => {
     const response = await authPost("reset-password", {
