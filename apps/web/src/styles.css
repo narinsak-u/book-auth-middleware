@@ -63,6 +63,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .form-status { margin: 16px 0; padding: 12px 14px; border-left: 3px solid var(--teal); background: #f0fdfa; color: #115e59; line-height: 1.5; }
 .account-links { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: .875rem; line-height: 1.5; }
 .account-links p { margin: 8px 0 0; }
+.session-panel .button { width: 100%; }
 .direct-note { margin: 20px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
 .loading-panel { max-width: 500px; margin: 80px auto; padding: 24px; border: 1px solid var(--border); border-left: 3px solid var(--teal); background: var(--surface); color: var(--muted); }
 .session-panel { max-width: 680px; margin: 64px auto; padding: clamp(28px, 5vw, 48px); border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); }
@@ -79,6 +80,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .recovery-panel input:disabled { background: #f1f5f9; }
 @media (max-width: 760px) {
   .portal-shell { width: min(100% - 32px, 540px); }
+  .topbar { align-items: flex-start; flex-direction: column; justify-content: center; padding: 16px 0; }
   .topbar { min-height: 68px; }
   .signin-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px 0 40px; }
   .welcome-panel { min-height: 0; padding: 28px 24px; }

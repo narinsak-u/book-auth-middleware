@@ -8,42 +8,49 @@ function Brand() {
   return <a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a>;
 }
 
-function SignOut({ email, allowLinking }: { email: string; allowLinking: boolean }) {
+function SignOut({ email, allowLinking, linkedProvider }: { email: string; allowLinking: boolean; linkedProvider: "google" | "github" | undefined }) {
   const [pending, setPending] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(allowLinking && linkedProvider ? `${linkedProvider === "google" ? "Google" : "GitHub"} account linked successfully.` : "");
+  const [messageError, setMessageError] = useState(false);
   async function link(provider: "google" | "github") {
     setPending(true);
+    setMessageError(false);
+    setMessage(`Opening ${provider === "google" ? "Google" : "GitHub"} to link your account…`);
     try {
-      const { error } = await authClient.linkSocial({ provider, callbackURL: "/" });
+      const { error } = await authClient.linkSocial({ provider, callbackURL: `/?providerLinked=${provider}` });
       if (error) throw error;
     } catch {
       setMessage("Provider link failed. Sign in to the provider account you want to add.");
+      setMessageError(true);
       setPending(false);
     }
   }
   async function signOut() {
     setPending(true);
-    setMessage("");
+    setMessageError(false);
+    setMessage("Signing out of Central Identity…");
     try {
       const { error } = await authClient.signOut();
       if (error) throw error;
       setEnded(true);
+      setPending(false);
       setMessage("Your Central SSO Session has ended. Existing Book Bidding and Read in Peace Application Sessions continue.");
     } catch {
       setPending(false);
       setMessage("Central sign-out could not be completed. Try again.");
+      setMessageError(true);
     }
   }
-  return <section className="session-panel" aria-labelledby="session-title">
+  return <section className="session-panel" aria-labelledby="session-title" aria-busy={pending}>
     <span className="session-symbol" aria-hidden="true">{ended ? "✓" : "●"}</span>
     <h1 id="session-title">{ended ? "Central SSO Session ended" : "Your Central Identity is ready."}</h1>
     {!ended && <p className="signed-in-as">Signed in as <strong>{email}</strong></p>}
     {!ended && <p>Use this Central SSO Session to continue to a connected application. Each application keeps its own Application Session.</p>}
-    {allowLinking && !ended && <div className="account-links"><p>Add another provider explicitly; email matching does not link accounts.</p><button className="button" type="button" onClick={() => link("google")} disabled={pending}>Link Google</button><button className="button button-secondary" type="button" onClick={() => link("github")} disabled={pending}>Link GitHub</button></div>}
+    {allowLinking && !ended && <div className="account-links"><p>Add another provider explicitly; email matching does not link accounts.</p><button className="button" type="button" onClick={() => link("google")} disabled={pending}>{pending ? "Please wait…" : "Link Google"}</button><button className="button button-secondary" type="button" onClick={() => link("github")} disabled={pending}>{pending ? "Please wait…" : "Link GitHub"}</button></div>}
     <div className="signout-note"><strong>Signing out here is central only.</strong><br />Existing Book Bidding and Read in Peace Application Sessions remain active until you sign out in each application or they expire.</div>
     {!ended && <button className="button button-secondary" type="button" onClick={signOut} disabled={pending}>{pending ? "Signing out…" : "Sign out of Central Identity"}</button>}
-    <p role="status" aria-live="polite" className="form-status">{message}</p>
+    {message && <p role={messageError ? "alert" : "status"} aria-live={messageError ? "assertive" : "polite"} className={messageError ? "form-error" : "form-status"}>{message}</p>}
   </section>;
 }
 
@@ -64,6 +71,8 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }, []);
 
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  const linkedProvider = params?.get("providerLinked");
+  const providerLinkNotice = linkedProvider === "google" || linkedProvider === "github" ? linkedProvider : undefined;
   const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
   const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
   const hasAuthorizationRequest = oauthQuery !== null;
@@ -95,7 +104,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     }
   }, [mode, session, hasAuthorizationRequest, resume?.clientId, resume?.redirectUri]);
 
-  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
+  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} linkedProvider={providerLinkNotice} /></main>;
   if (mode === "home") return <main className="portal-shell"><header className="topbar"><Brand /></header><section className="loading-panel" role="status">{session === null ? "Opening sign-in…" : "Checking your Central SSO Session…"}</section></main>;
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
