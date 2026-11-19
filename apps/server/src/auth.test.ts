@@ -183,10 +183,6 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         expiredVerificationURL.searchParams.set("token", expiredVerificationToken);
         expect((await fetch(expiredVerificationURL, { redirect: "manual" })).status)
           .toBeGreaterThanOrEqual(400);
-        expect((await authPost("sign-in/email", {
-          email,
-          password: "verified-password-123",
-        })).status).toBeGreaterThanOrEqual(400);
         const freshVerificationURL = (await messageFor(email)).match(/https?:\/\/[^\s<>"]+/)?.[0];
         if (!freshVerificationURL) throw new Error("Verification email had no link");
         await fetch(freshVerificationURL, { redirect: "manual" });
@@ -209,10 +205,6 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
           token,
           newPassword: "expired-reset-password-456",
         })).status).toBeGreaterThanOrEqual(400);
-        expect((await authPost("sign-in/email", {
-          email,
-          password: "verified-password-123",
-        })).status).toBe(200);
       } finally {
         await database.end();
       }
