@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
 
 import postgres from "postgres";
 
@@ -166,20 +167,26 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
       try {
         const verificationEmail = `${crypto.randomUUID()}@example.test`;
         expect((await register(verificationEmail)).status).toBe(200);
-        const verificationURL = (await messageFor(verificationEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
-        if (!verificationURL) throw new Error("Verification email had no link");
-        const verificationToken = new URL(verificationURL).searchParams.get("token");
-        if (!verificationToken) throw new Error("Verification email had no token");
-        expect((await database`
-          UPDATE verification SET expires_at = NOW() - INTERVAL '1 second'
-          WHERE identifier = ${verificationToken}
-        `).count).toBe(1);
-        await fetch(verificationURL, { redirect: "manual" });
+        const verificationSecret = process.env.BETTER_AUTH_SECRET ??
+          "local-only-secret-change-before-deployment-32chars";
+        const unsignedVerificationToken = [
+          Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+          Buffer.from(JSON.stringify({
+            email: verificationEmail,
+            exp: Math.floor(Date.now() / 1000) - 1,
+          })).toString("base64url"),
+        ].join(".");
+        const expiredVerificationToken = `${unsignedVerificationToken}.${createHmac("sha256", verificationSecret)
+          .update(unsignedVerificationToken)
+          .digest("base64url")}`;
+        const expiredVerificationURL = new URL("/api/auth/verify-email", provider);
+        expiredVerificationURL.searchParams.set("token", expiredVerificationToken);
+        expect((await fetch(expiredVerificationURL, { redirect: "manual" })).status)
+          .toBeGreaterThanOrEqual(400);
         expect((await authPost("sign-in/email", {
           email: verificationEmail,
           password: "verified-password-123",
         })).status).toBeGreaterThanOrEqual(400);
-
         const resetEmail = `${crypto.randomUUID()}@example.test`;
         expect((await register(resetEmail)).status).toBe(200);
         const freshVerificationURL = (await messageFor(resetEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
@@ -198,7 +205,7 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         if (!token) throw new Error("Password reset email had no token");
         expect((await database`
           UPDATE verification SET expires_at = NOW() - INTERVAL '1 second'
-          WHERE identifier = ${token}
+          WHERE identifier = ${`reset-password:${token}`}
         `).count).toBe(1);
         expect((await authPost("reset-password", {
           token,
