@@ -95,7 +95,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     }
   }, [mode, session, hasAuthorizationRequest, resume?.clientId, resume?.redirectUri]);
 
-  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true">●</span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
+  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
   if (mode === "home") return <main className="portal-shell"><header className="topbar"><Brand /></header><section className="loading-panel" role="status">{session === null ? "Opening sign-in…" : "Checking your Central SSO Session…"}</section></main>;
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
@@ -144,7 +144,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }
 
   return <main className="portal-shell">
-    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true">●</span> Secure sign-in</span></header>
+    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Secure sign-in</span></header>
     {session === undefined && <section className="loading-panel" role="status">Checking your Central SSO Session…</section>}
     <div className="signin-layout">
       <section className="welcome-panel" aria-labelledby="welcome-title">
