@@ -25,7 +25,7 @@ Then run the API and portal with Bun:
 bun run dev
 ```
 
-The command migrates the database, runs the API on port `3080`, and serves the portal on port `8080`.
+The command migrates the database, runs the API on port `3080`, and serves the portal on port `8080`. Signup verification and password recovery use the development Mailpit inbox at `http://localhost:8025`.
 
 ### Full Docker stack
 
@@ -34,7 +34,7 @@ bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
   docker compose --env-file /dev/null up --build
 ```
 
-This runs PostgreSQL, Mailpit, API, portal, and Caddy in Compose.
+This runs PostgreSQL, Mailpit, API, portal, and Caddy in Compose. The Mailpit inbox is at `http://localhost:8025`.
 
 Run Book Bidding in a second terminal:
 

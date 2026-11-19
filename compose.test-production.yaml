@@ -13,6 +13,8 @@ services:
     environment:
       NODE_ENV: production
       TEST_PRODUCTION: "true"
+      EMAIL_PROVIDER: mailpit
+      EMAIL_FROM: ${EMAIL_FROM:?Set test-production EMAIL_FROM}
       AUTH_DOMAIN: ${AUTH_DOMAIN:?Set test-production AUTH_DOMAIN}
       DATABASE_URL: ${DATABASE_URL:?Set isolated test-production DATABASE_URL}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set test-production BETTER_AUTH_URL}

@@ -65,7 +65,6 @@ Provisioning clients is an operator CLI operation, not a public registration end
 ## Setup
 
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
-`read-in-peace/`. Install Bun 1.4.2 or newer, Docker Engine with Compose, and
 the repository's development dotenvx keys. Never share or commit keys or client
 secrets. Port `8080` must be free. Bun mode also uses loopback ports `5432` and `1025`.
 
@@ -97,9 +96,9 @@ bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
   docker compose --env-file /dev/null up --build
 ```
 
-Compose runs all five services. Caddy serves `127.0.0.1:8080`; Postgres and Mailpit SMTP stay inside the Compose network.
+Compose runs all five services. Caddy serves `127.0.0.1:8080`; Mailpit SMTP stays inside the Compose network and its inbox is at `http://localhost:8025`.
 
-Both modes preserve existing named database and service volumes. Use email/password for local sign-in. Google and GitHub callbacks are deferred and unverified for this HTTP flow; do not rely on them. Do not expose development services to a network.
+Both development modes explicitly use Mailpit. Isolated test-production uses its separate Mailpit inbox at `http://localhost:8026`; real production keeps authenticated SMTP until the mail-provider cutover.
 
 Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision separate OIDC clients and register exact callbacks. Do not use production data or credentials for local tests.
 
