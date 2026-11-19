@@ -28,31 +28,29 @@ export function createEmailSender(
   }
 
   const from = required(environment, "EMAIL_FROM");
+  let send: (message: Message) => Promise<unknown>;
   if (productionRuntime) {
     const resend = createResend(required(environment, "RESEND_API_KEY"));
-    return async ({ to, subject, text }: Message): Promise<void> => {
-      try {
-        const { error } = await resend.emails.send({ from, to, subject, text });
-        if (error) throw new Error();
-      } catch {
-        throw new Error("Email delivery failed");
-      }
+    send = async ({ to, subject, text }) => {
+      const { error } = await resend.emails.send({ from, to, subject, text });
+      if (error) throw error;
     };
+  } else {
+    const port = Number(required(environment, "SMTP_PORT"));
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error("SMTP_PORT must be a valid TCP port");
+    }
+    const mailer = nodemailer.createTransport({
+      host: required(environment, "SMTP_HOST"),
+      port,
+      secure: port === 465,
+    });
+    send = ({ to, subject, text }) => mailer.sendMail({ from, to, subject, text });
   }
 
-  const port = Number(required(environment, "SMTP_PORT"));
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("SMTP_PORT must be a valid TCP port");
-  }
-  const mailer = nodemailer.createTransport({
-    host: required(environment, "SMTP_HOST"),
-    port,
-    secure: port === 465,
-  });
-
-  return async ({ to, subject, text }: Message): Promise<void> => {
+  return async (message: Message): Promise<void> => {
     try {
-      await mailer.sendMail({ from, to, subject, text });
+      await send(message);
     } catch {
       throw new Error("Email delivery failed");
     }

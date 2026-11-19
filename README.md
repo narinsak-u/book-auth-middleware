@@ -65,8 +65,10 @@ Provisioning clients is an operator CLI operation, not a public registration end
 ## Setup
 
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
-the repository's development dotenvx keys. Never share or commit keys or client
-secrets. Port `8080` must be free. Bun mode also uses loopback ports `5432` and `1025`.
+`read-in-peace/`. Install Bun 1.4.2 and Docker with the Compose plugin.
+Keep Central Identity's development dotenvx keys in its checkout. Never share
+or commit keys or client secrets. Port `8080` must be free. Bun mode also uses
+loopback ports `5432` and `1025`.
 
 ## Development modes
 
@@ -96,9 +98,10 @@ bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
   docker compose --env-file /dev/null up --build
 ```
 
-Both development modes explicitly use Mailpit. Isolated test-production uses its
-separate Mailpit inbox at `http://localhost:8026`. Real production requires
-Resend and never uses SMTP or Mailpit.
+Both development modes explicitly use Mailpit and need no Resend key.
+Isolated test-production uses its separate Mailpit inbox at
+`http://localhost:8026`. Real production requires Resend and never uses SMTP or
+Mailpit.
 
 Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision separate OIDC clients and register exact callbacks. Do not use production data or credentials for local tests.
 
@@ -205,11 +208,12 @@ Standalone Central Identity production uses
 [`compose.identity.production.yaml`](compose.identity.production.yaml) and
 `.env.identity.production.example`. Keep the verified existing external
 `IDENTITY_DB_VOLUME`, database URL, issuer, network, health checks, and
-loopback-only service bindings. Set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`,
-and `EMAIL_FROM` in protected production configuration. Do not configure SMTP
-for this Compose project. The encrypted `.env.production` is legacy state:
-operators must migrate production settings through the existing protected
-dotenvx process before cutover; do not decrypt or expose secret values.
+loopback-only service bindings. Before production startup, provision a real
+`RESEND_API_KEY` and Resend-verified `EMAIL_FROM` through the existing protected
+dotenvx workflow. Do not configure SMTP for this Compose project. The encrypted
+`.env.production` is legacy state: operators must migrate production settings
+through the protected dotenvx process before cutover; do not decrypt or expose
+secret values.
 
 Before cutover, verify the sending domain in Resend and publish its required
 SPF and DKIM records. Publish a DMARC policy appropriate to the domain and
