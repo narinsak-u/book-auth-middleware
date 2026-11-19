@@ -165,14 +165,14 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
       };
 
       try {
-        const verificationEmail = `${crypto.randomUUID()}@example.test`;
-        expect((await register(verificationEmail)).status).toBe(200);
+        const email = `${crypto.randomUUID()}@example.test`;
+        expect((await register(email)).status).toBe(200);
         const verificationSecret = process.env.BETTER_AUTH_SECRET ??
           "local-only-secret-change-before-deployment-32chars";
         const unsignedVerificationToken = [
           Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
           Buffer.from(JSON.stringify({
-            email: verificationEmail,
+            email,
             exp: Math.floor(Date.now() / 1000) - 1,
           })).toString("base64url"),
         ].join(".");
@@ -184,19 +184,17 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
         expect((await fetch(expiredVerificationURL, { redirect: "manual" })).status)
           .toBeGreaterThanOrEqual(400);
         expect((await authPost("sign-in/email", {
-          email: verificationEmail,
+          email,
           password: "verified-password-123",
         })).status).toBeGreaterThanOrEqual(400);
-        const resetEmail = `${crypto.randomUUID()}@example.test`;
-        expect((await register(resetEmail)).status).toBe(200);
-        const freshVerificationURL = (await messageFor(resetEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
+        const freshVerificationURL = (await messageFor(email)).match(/https?:\/\/[^\s<>"]+/)?.[0];
         if (!freshVerificationURL) throw new Error("Verification email had no link");
         await fetch(freshVerificationURL, { redirect: "manual" });
         expect((await authPost("request-password-reset", {
-          email: resetEmail,
+          email,
           redirectTo: `${provider}/reset-password`,
         })).status).toBe(200);
-        const resetURL = (await messageFor(resetEmail)).match(/https?:\/\/[^\s<>"]+/)?.[0];
+        const resetURL = (await messageFor(email)).match(/https?:\/\/[^\s<>"]+/)?.[0];
         if (!resetURL) throw new Error("Password reset email had no link");
         const resetPage = await fetch(resetURL, { redirect: "manual" });
         const resetLocation = resetPage.headers.get("location");
@@ -212,7 +210,7 @@ describe.skipIf(!provider)("Central Identity public HTTP behavior", () => {
           newPassword: "expired-reset-password-456",
         })).status).toBeGreaterThanOrEqual(400);
         expect((await authPost("sign-in/email", {
-          email: resetEmail,
+          email,
           password: "verified-password-123",
         })).status).toBe(200);
       } finally {
