@@ -1,5 +1,6 @@
 import { authorizationResume, resumeSignInPath, verificationCallback } from "./authorization-resume";
 import { authClient } from "./auth-client";
+import { SuccessToast } from "./success-toast";
 import { useEffect, useState, type FormEvent } from "react";
 
 type Session = { user: { email: string } } | null;
@@ -8,17 +9,18 @@ function Brand() {
   return <a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a>;
 }
 
-function SignOut({ email, allowLinking, linkedProvider }: { email: string; allowLinking: boolean; linkedProvider: "google" | "github" | undefined }) {
+function SignOut({ email, allowLinking }: { email: string; allowLinking: boolean }) {
   const [pending, setPending] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [message, setMessage] = useState(allowLinking && linkedProvider ? `${linkedProvider === "google" ? "Google" : "GitHub"} account linked successfully.` : "");
+  const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState("");
   const [messageError, setMessageError] = useState(false);
   async function link(provider: "google" | "github") {
     setPending(true);
     setMessageError(false);
     setMessage(`Opening ${provider === "google" ? "Google" : "GitHub"} to link your account…`);
     try {
-      const { error } = await authClient.linkSocial({ provider, callbackURL: `/?providerLinked=${provider}` });
+      const { error } = await authClient.linkSocial({ provider, callbackURL: "/" });
       if (error) throw error;
     } catch {
       setMessage("Provider link failed. Sign in to the provider account you want to add.");
@@ -35,7 +37,8 @@ function SignOut({ email, allowLinking, linkedProvider }: { email: string; allow
       if (error) throw error;
       setEnded(true);
       setPending(false);
-      setMessage("Your Central SSO Session has ended. Existing Book Bidding and Read in Peace Application Sessions continue.");
+      setMessage("");
+      setSuccess("Central SSO Session ended.");
     } catch {
       setPending(false);
       setMessage("Central sign-out could not be completed. Try again.");
@@ -51,6 +54,7 @@ function SignOut({ email, allowLinking, linkedProvider }: { email: string; allow
     <div className="signout-note"><strong>Signing out here is central only.</strong><br />Existing Book Bidding and Read in Peace Application Sessions remain active until you sign out in each application or they expire.</div>
     {!ended && <button className="button button-secondary" type="button" onClick={signOut} disabled={pending}>{pending ? "Signing out…" : "Sign out of Central Identity"}</button>}
     {message && <p role={messageError ? "alert" : "status"} aria-live={messageError ? "assertive" : "polite"} className={messageError ? "form-error" : "form-status"}>{message}</p>}
+    {success && <SuccessToast message={success} />}
   </section>;
 }
 
@@ -71,8 +75,6 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }, []);
 
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
-  const linkedProvider = params?.get("providerLinked");
-  const providerLinkNotice = linkedProvider === "google" || linkedProvider === "github" ? linkedProvider : undefined;
   const isSignedAuthorizeRequest = params !== null && params.has("sig") && params.has("client_id");
   const oauthQuery = params?.get("oauth_query") ?? (isSignedAuthorizeRequest ? window.location.search.slice(1) : null);
   const hasAuthorizationRequest = oauthQuery !== null;
@@ -104,7 +106,7 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
     }
   }, [mode, session, hasAuthorizationRequest, resume?.clientId, resume?.redirectUri]);
 
-  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} linkedProvider={providerLinkNotice} /></main>;
+  if (session?.user) return <main className="portal-shell"><header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Central SSO Session active</span></header><SignOut email={session.user.email} allowLinking={oauthEnabled === true} /></main>;
   if (mode === "home") return <main className="portal-shell"><header className="topbar"><Brand /></header><section className="loading-panel" role="status">{session === null ? "Opening sign-in…" : "Checking your Central SSO Session…"}</section></main>;
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
@@ -199,11 +201,6 @@ export function Enrollment() {
   const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
   const oauthQuery = params?.get("oauth_query") ?? null;
   const invitation = params?.get("invitation") ?? "";
-  useEffect(() => {
-    if (!showToast) return;
-    const timeout = window.setTimeout(() => setShowToast(false), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [showToast]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -237,7 +234,7 @@ export function Enrollment() {
   }
 
   return <main className="portal-shell">
-    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true">●</span> Secure account creation</span></header>
+    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Secure account creation</span></header>
     <div className="signin-layout">
       <section className="welcome-panel" aria-labelledby="signup-welcome-title">
         <p className="welcome-kicker">A single identity</p>
@@ -249,7 +246,7 @@ export function Enrollment() {
         <p className="form-kicker">Get started</p>
         <h2 id="signup-title">Create a Central Identity</h2>
         <p className="form-intro">Use one identity to sign in to connected applications.</p>
-        {submitted ? <p role="status">Check your email to verify your identity.</p> : <form onSubmit={submit} aria-busy={pending}>
+        {submitted ? <p role="status">If this email can be enrolled, check your inbox for next steps.</p> : <form onSubmit={submit} aria-busy={pending}>
           <label htmlFor="signup-name">Name</label><input id="signup-name" name="name" autoComplete="name" required disabled={pending} />
           <label htmlFor="signup-username">Username</label><input id="signup-username" name="username" autoComplete="username" autoCapitalize="none" minLength={3} maxLength={30} pattern="[A-Za-z0-9_]+" aria-describedby="signup-username-help" required disabled={pending} />
           <p className="field-hint" id="signup-username-help">Use 3–30 letters, numbers, or underscores.</p>
@@ -257,10 +254,10 @@ export function Enrollment() {
           <label htmlFor="signup-password">Password</label><input id="signup-password" name="password" type="password" autoComplete="new-password" minLength={8} aria-describedby="signup-password-help" required disabled={pending} />
           <p className="field-hint" id="signup-password-help">Use at least 8 characters.</p>
           {error && <p className="form-error" role="alert">{error}</p>}
-          {pending && <p className="form-status" role="status" aria-live="polite">Creating your Central Identity…</p>}
-          <button className="button" type="submit" disabled={pending}>{pending ? "Creating identity…" : "Create identity"}</button>
+          {pending && <p className="form-status" role="status" aria-live="polite">Submitting your request…</p>}
+          <button className="button" type="submit" disabled={pending}>{pending ? "Please wait…" : "Continue"}</button>
         </form>}
-        {showToast && <p className="success-toast" role="status" aria-live="polite">Central Identity created. Verify your email to finish setup.</p>}
+        {showToast && <SuccessToast message="If this email can be enrolled, check your inbox for next steps." />}
         <div className="account-links"><a href="/sign-in">Return to sign in</a></div>
       </section>
     </div>

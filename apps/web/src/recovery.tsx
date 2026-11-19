@@ -1,16 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { authClient } from "./auth-client";
+import { SuccessToast } from "./success-toast";
 
 function Shell({ children }: { children: ReactNode }) {
   return <main className="portal-shell"><header className="topbar"><a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a><span className="secure-label">Account recovery</span></header><section className="recovery-panel">{children}</section></main>;
-}
-function SuccessToast({ message }: { message: string }) {
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setVisible(false), 4000);
-    return () => window.clearTimeout(timeout);
-  }, []);
-  return visible ? <p className="success-toast" role="status" aria-live="polite">{message}</p> : null;
 }
 
 

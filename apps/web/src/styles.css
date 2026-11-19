@@ -59,7 +59,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .button:hover { border-color: var(--blue-hover); background: var(--blue-hover); color: #fff; }
 .button:disabled { border-color: #94a3b8; background: #94a3b8; color: #fff; cursor: wait; }
 .button-secondary { width: 100%; margin-top: 12px; border-color: var(--border); background: var(--surface); color: var(--blue); }
-.button-secondary:hover { border-color: var(--blue); background: #eff6ff; color: var(--blue-hover); }
+.button-secondary:hover:not(:disabled) { border-color: var(--blue); background: #eff6ff; color: var(--blue-hover); }
 .form-error { margin: 12px 0; padding: 12px 14px; border-left: 3px solid #b91c1c; background: #fef2f2; color: #7f1d1d; line-height: 1.5; }
 .form-status { margin: 16px 0; padding: 12px 14px; border-left: 3px solid var(--teal); background: #f0fdfa; color: #115e59; line-height: 1.5; }
 .success-toast { position: fixed; z-index: 10; right: 16px; bottom: 16px; left: 16px; width: min(420px, calc(100% - 32px)); margin: 0 auto; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); color: #115e59; line-height: 1.5; }
@@ -81,7 +81,6 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .recovery-panel input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--input-border); border-radius: 0; background: var(--surface); color: var(--ink); }
 .recovery-panel input[aria-invalid="true"] { border-color: #b91c1c; }
 .field-help { color: var(--muted); font-size: .8125rem; line-height: 1.45; }
-.success-toast { position: fixed; right: 24px; bottom: 24px; z-index: 2; width: min(420px, calc(100vw - 48px)); margin: 0; padding: 16px; border: 1px solid var(--border); border-left: 4px solid var(--teal); background: var(--surface); color: #115e59; line-height: 1.5; }
 .recovery-panel input:disabled { background: #f1f5f9; }
 @media (max-width: 760px) {
   .portal-shell { width: min(100% - 32px, 540px); }
