@@ -178,7 +178,6 @@ export function Portal({ mode }: { mode: "home" | "sign-in" }) {
   }
 
   return <main className="portal-shell">
-    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Secure sign-in</span></header>
     {session === undefined && <section className="loading-panel" role="status">Checking your Central SSO Session…</section>}
     <div className="signin-layout">
       <section className="welcome-panel" aria-labelledby="welcome-title">
@@ -257,7 +256,6 @@ export function Enrollment() {
   }
 
   return <main className="portal-shell">
-    <header className="topbar"><Brand /><span className="secure-label"><span aria-hidden="true"></span> Secure account creation</span></header>
     <div className="signin-layout">
       <section className="welcome-panel" aria-labelledby="signup-welcome-title">
         <p className="welcome-kicker">A single identity</p>

@@ -3,7 +3,7 @@ import { authClient } from "./auth-client";
 import { SuccessToast } from "./success-toast";
 
 function Shell({ children }: { children: ReactNode }) {
-  return <main className="portal-shell"><header className="topbar"><a className="brand" href="/" aria-label="Central Identity home"><span className="brand-mark" aria-hidden="true">C</span><span>Central Identity</span></a><span className="secure-label">Account recovery</span></header><section className="recovery-panel">{children}</section></main>;
+  return <main className="portal-shell"><section className="recovery-panel">{children}</section></main>;
 }
 
 
