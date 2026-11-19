@@ -107,6 +107,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 }
 @media (min-width: 761px) and (max-height: 850px) {
   .topbar { min-height: 60px; }
+  .signin-layout { gap: 24px; margin: auto; }
   .welcome-panel { min-height: 0; padding: 28px; }
   .welcome-kicker, .form-kicker { margin-bottom: 12px; }
   .welcome-panel > p:not(.welcome-kicker) { margin-top: 14px; }
