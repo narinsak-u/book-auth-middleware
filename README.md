@@ -65,9 +65,10 @@ Provisioning clients is an operator CLI operation, not a public registration end
 ## Setup
 
 Use three sibling checkouts: `book-auth-middleware/`, `book-bidding/`, and
-`read-in-peace/`. Install Bun 1.4.2 or newer, Docker Engine with Compose, and
-the repository's development dotenvx keys. Never share or commit keys or client
-secrets. Port `8080` must be free. Bun mode also uses loopback ports `5432` and `1025`.
+`read-in-peace/`. Install Bun 1.4.2 and Docker with the Compose plugin.
+Keep Central Identity's development dotenvx keys in its checkout. Never share
+or commit keys or client secrets. Port `8080` must be free. Bun mode also uses
+loopback ports `5432` and `1025`.
 
 ## Development modes
 
@@ -97,9 +98,10 @@ bunx dotenvx run --strict --overload -f .env.development -fk .env.keys -- \
   docker compose --env-file /dev/null up --build
 ```
 
-Compose runs all five services. Caddy serves `127.0.0.1:8080`; Postgres and Mailpit SMTP stay inside the Compose network.
-
-Both modes preserve existing named database and service volumes. Use email/password for local sign-in. Google and GitHub callbacks are deferred and unverified for this HTTP flow; do not rely on them. Do not expose development services to a network.
+Both development modes explicitly use Mailpit and need no Resend key.
+Isolated test-production uses its separate Mailpit inbox at
+`http://localhost:8026`. Real production requires Resend and never uses SMTP or
+Mailpit.
 
 Follow the [Development SSO workflow](docs/local-oauth-sso.md) to provision separate OIDC clients and register exact callbacks. Do not use production data or credentials for local tests.
 
@@ -201,3 +203,31 @@ Central Identity, its RPs, and `sso-edge` deploy independently. Production
 ingress and rollback instructions are in the
 [`sso-edge` operations guide](../sso-edge/README.md). Local setup does not prove
 production DNS, TLS, backups, or SSO.
+
+Standalone Central Identity production uses
+[`compose.identity.production.yaml`](compose.identity.production.yaml) and
+`.env.identity.production.example`. Keep the verified existing external
+`IDENTITY_DB_VOLUME`, database URL, issuer, network, health checks, and
+loopback-only service bindings. Before production startup, provision a real
+`RESEND_API_KEY` and Resend-verified `EMAIL_FROM` through the existing protected
+dotenvx workflow. Do not configure SMTP for this Compose project. The encrypted
+`.env.production` is legacy state: operators must migrate production settings
+through the protected dotenvx process before cutover; do not decrypt or expose
+secret values.
+
+Before cutover, verify the sending domain in Resend and publish its required
+SPF and DKIM records. Publish a DMARC policy appropriate to the domain and
+confirm DNS propagation and Resend verification. Use a minimum-scope API key
+from protected secret management.
+
+Startup and synthetic cutover rehearsals validate configuration and routing
+only; they send no email and do not prove domain verification or delivery.
+Block production cutover until an operator sends both verification and
+password-reset messages from the verified domain to approved recipients,
+follows both links, and confirms successful account journeys. Never use an
+arbitrary recipient for live checks. Keep legacy SMTP settings only for the
+pre-cutover rollback release.
+
+Follow the step-by-step [production deployment runbook](docs/deployment.md) before
+the Resend cutover.
+

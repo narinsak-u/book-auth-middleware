@@ -181,11 +181,9 @@ BETTER_AUTH_URL=https://$identity_host:$https_port
 BETTER_AUTH_SECRET=$provider_auth_secret
 POSTGRES_PASSWORD=$provider_password
 DATABASE_URL=postgres://central:$provider_password@db:5432/central
-SMTP_HOST=smtp.invalid
-SMTP_PORT=587
-SMTP_FROM=Identity <identity@example.invalid>
-SMTP_USER=synthetic
-SMTP_PASSWORD=synthetic
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=synthetic-resend-api-key
+EMAIL_FROM=Identity <identity@example.invalid>
 IDENTITY_AUTH_PORT=$identity_auth_port
 IDENTITY_PORT=$identity_port
 EOF

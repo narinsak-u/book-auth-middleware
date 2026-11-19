@@ -34,9 +34,8 @@ export BETTER_AUTH_URL="https://${AUTH_DOMAIN}"
 export BETTER_AUTH_SECRET=synthetic-provider-auth-secret-at-least-32-characters
 export POSTGRES_PASSWORD=synthetic-provider-db-password
 export DATABASE_URL=postgres://central:synthetic-provider-db-password@db:5432/central
-export SMTP_HOST=smtp.invalid SMTP_PORT=587
-export SMTP_FROM='Synthetic Identity <identity@example.invalid>'
-export SMTP_USER=synthetic SMTP_PASSWORD=synthetic
+export EMAIL_PROVIDER=resend RESEND_API_KEY=synthetic-resend-api-key
+export EMAIL_FROM='Synthetic Identity <identity@example.invalid>'
 export IDENTITY_DB_VOLUME="$volume"
 if docker volume inspect "$volume" >/dev/null 2>&1; then
   echo "Refusing to reuse existing provider volume: $volume" >&2

@@ -35,9 +35,10 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      EMAIL_PROVIDER: mailpit
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      SMTP_FROM: ${SMTP_FROM:-Central Identity <identity@localhost>}
+      EMAIL_FROM: ${EMAIL_FROM:-Central Identity <identity@localhost>}
       BIDDING_OIDC_CLIENT_ID: ${BIDDING_OIDC_CLIENT_ID:-}
       READING_OIDC_CLIENT_ID: ${READING_OIDC_CLIENT_ID:-}
       PORT: 3000
