@@ -227,3 +227,7 @@ password-reset messages from the verified domain to approved recipients,
 follows both links, and confirms successful account journeys. Never use an
 arbitrary recipient for live checks. Keep legacy SMTP settings only for the
 pre-cutover rollback release.
+
+Follow the step-by-step [production deployment runbook](docs/deployment.md) before
+the Resend cutover.
+
